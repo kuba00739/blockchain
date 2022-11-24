@@ -1,7 +1,10 @@
 use bincode::serialize;
 use serde::{Serialize};
+use sha2::{Sha256, Digest,};
 
 use String;
+
+const HASH_LEN: usize = 32;
 
 #[derive(Debug)]
 #[derive(Serialize)]
@@ -19,48 +22,47 @@ struct Car {
     vin_number: Vin,
 }
 #[derive(Debug)]
-#[derive(Serialize)]
 struct Block {
-    hash: u32,
+    hash: [u8; HASH_LEN],
     id: u32,
-    prev_hash: u32,
+    prev_hash: [u8; HASH_LEN], 
     nonce: u32,
     registered_car: Car,
 }
 
 fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) {
-    let prev_hash;
     match list_of_blocks.last() {
-        Some(block) => prev_hash = block.hash,
-        None => prev_hash = 0,
+        Some(last_block) => new_block.prev_hash = last_block.hash,
+        None => new_block.prev_hash = [0;HASH_LEN],
     };
-    new_block.prev_hash = prev_hash;
     new_block.id = list_of_blocks.len() as u32;
     let calculated = mine_block(new_block);
     new_block.nonce = calculated.0;
     new_block.hash = calculated.1;
 }
 
-fn mine_block(new_block: &mut Block) -> (u32, u32){
+fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
     let mut bytes: Vec<u8> = Vec::new();
-    bytes.extend(&new_block.id.to_be_bytes());
-    bytes.extend(&new_block.prev_hash.to_be_bytes());
-    bytes.extend(&new_block.nonce.to_be_bytes());
-    let test_bytes = serialize(&new_block.registered_car);
-    bytes.extend(&test_bytes.unwrap());
 
-    let mut sum: u32 = 1;
+    bytes.extend(&new_block.id.to_be_bytes());
+    bytes.extend(&new_block.prev_hash);
+    bytes.extend(&new_block.nonce.to_be_bytes());
+    bytes.extend(&serialize(&new_block.registered_car).unwrap());
+
     let mut nonce: u32 = 0;
-    while (sum % 1000) != 0 {
-        sum = 0;
-        for byte in &bytes{
-            sum += *byte as u32;
-        }
-        sum += nonce;
+    //let mut finished = false;
+
+    while 1==1 {
+        let mut sha2_hash = Sha256::new();
+        sha2_hash.update(&bytes);
+        sha2_hash.update(nonce.to_be_bytes());
+        let sum = sha2_hash.finalize();
+        if (sum[0]==0) && (sum[1]==0) {
+            return (nonce, sum.try_into().expect("Hash size is too big"));
+        };
         nonce += 1; 
-    }
-    nonce -= 1;
-    (nonce, sum)
+    };
+    (0, [0;HASH_LEN])
 }
 
 fn main() {
@@ -75,17 +77,41 @@ fn main() {
             vis: "3A004352".to_string(),
         }
     };
+
+    let one_more_car = Car{
+        owner_name: String::from("Jakub"),
+        owner_surname: String::from("Niezabitowski"),
+        distance_traveled: 130000,
+        vin_number: Vin{
+            wmi: "2HG".to_string(),
+            vds: "C482G3".to_string(),
+            vis: "3A114352".to_string(),
+        }
+    };
+
     println!("New Car: {:?}", new_car);
     let mut block= Block{
-        hash: 0,
+        hash: [0;HASH_LEN],
         id: 0,
-        prev_hash: 0,
+        prev_hash: [0;HASH_LEN],
         nonce: 0,
         registered_car: new_car
     };
 
+    let mut block2= Block{
+        hash: [0; HASH_LEN],
+        id: 0,
+        prev_hash: [0;HASH_LEN],
+        nonce: 0,
+        registered_car: one_more_car
+    };
+
+    //println!("{:?}", block);
+
     calculate_block(&mut block, &blocks);
     blocks.push(block);
+    calculate_block(&mut block2, &blocks);
+    blocks.push(block2);
 
     println!("{:?}", blocks);
     //println!("Block: {:?}", &block);
