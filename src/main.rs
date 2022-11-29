@@ -58,7 +58,11 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
         sha2_hash.update(nonce.to_be_bytes());
         let sum = sha2_hash.finalize();
         if (sum[0]==0) && (sum[1]==0) {
-            return (nonce, sum.try_into().expect("Hash size is too big"));
+            let result = match sum.try_into(){
+                Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
+                Ok(result) => result,
+            };
+            return (nonce, result);
         };
         nonce += 1; 
     };
