@@ -1,26 +1,33 @@
-use bincode::serialize;
-use serde::{Serialize};
+use bincode::{serialize, deserialize};
+use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest,};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+use std::env;
 
 use String;
 
 const HASH_LEN: usize = 32;
+const NODES: [&str; 3] = ["127.0.0.1:9091", "127.0.0.1:9092", "127.0.0.1:9093"];
 
 #[derive(Debug)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Vin {
     wmi: String,
     vds: String,
     vis: String,
 }
 #[derive(Debug)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct Car {
     owner_name: String,
     owner_surname: String,
     distance_traveled: u32,
     vin_number: Vin,
 }
+
+#[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct Block {
     hash: [u8; HASH_LEN],
@@ -39,6 +46,7 @@ fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) {
     let calculated = mine_block(new_block);
     new_block.nonce = calculated.0;
     new_block.hash = calculated.1;
+    publish_block(new_block);
 }
 
 fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
@@ -69,7 +77,66 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
     (0, [0;HASH_LEN])
 }
 
+
+fn handle_incoming(mut stream: TcpStream){
+    let mut buff = [0;1280];
+    match stream.read(&mut buff) {
+        Ok(_d) => {}
+        Err(e) => {eprintln!("Error while handling stream: {e}");}
+    }
+    println!("{:?}", deserialize::<Block>(&buff).unwrap());
+}
+
+
+fn send(ip: &str, data: &[u8]){
+    let mut stream :TcpStream;
+    match TcpStream::connect(ip){
+        Ok(s) => {stream = s;}
+        Err(e) => {
+            eprintln!("Error connecting to node {ip}, {e}");
+            return;
+        }
+    };
+    match stream.write(data){
+        Ok(_s) => {return;}
+        Err(e) => {
+            eprintln!("Error while writing to stream: {e}");
+            return;
+        }
+    }
+}
+
+
+fn listen(addr: &String){
+    let listener = TcpListener::bind(addr).unwrap();
+
+    for stream in listener.incoming(){
+        let stream = stream.unwrap();
+        let peer_addr = stream.peer_addr().unwrap();
+        println!("Remote connection from {:#?}", peer_addr);
+
+        let thr = thread::spawn(|| {
+            handle_incoming(stream);
+        });
+        match thr.join(){
+            Ok(_s) => {println!("Remote connection with {:#?} closed", peer_addr);}
+            Err(e) => {eprintln!("Error while joining thread: {:#?}", e);}
+
+        };
+        println!("Remote connection with {:#?} closed", peer_addr);
+    }
+
+}
+
+fn publish_block(block: &Block){
+    for node in NODES{
+        send(node, &serialize(block).unwrap());
+    }
+}
+
 fn main() {
+    let args: Vec<String> = env::args().collect();
+
     let mut blocks: Vec<Block> = Vec::new();
     let new_car = Car{
         owner_name: String::from("Jakub"),
@@ -110,14 +177,20 @@ fn main() {
         registered_car: one_more_car
     };
 
-    //println!("{:?}", block);
-
     calculate_block(&mut block, &blocks);
     blocks.push(block);
     calculate_block(&mut block2, &blocks);
     blocks.push(block2);
 
     println!("{:?}", blocks);
-    //println!("Block: {:?}", &block);
+    let listener_thread = thread::spawn(move || {
+        listen(&args[1]);
+    });
+
+    for node in NODES{
+        send(node, &serialize(&blocks[0]).unwrap());
+    }
+    listener_thread.join().expect("Error while joining listener thread.");
+
 
 }

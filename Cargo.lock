@@ -26,6 +26,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "hex-literal",
+ "net",
  "serde",
  "sha2",
  "string",
@@ -93,6 +94,12 @@ name = "libc"
 version = "0.2.137"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc7fcc620a3bff7cdd7a365be3376c97191aeaccc2a603e600951e452615bf89"
+
+[[package]]
+name = "net"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a69b0f48b4767574ed853cdf90a20b98b62d2488821ba270cb58ebca056b1c8f"
 
 [[package]]
 name = "proc-macro2"
