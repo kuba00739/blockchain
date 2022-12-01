@@ -3,13 +3,16 @@ use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest,};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+//use std::sync::{Arc, Mutex};
 use std::thread;
 use std::env;
+
 
 use String;
 
 const HASH_LEN: usize = 32;
-const NODES: [&str; 3] = ["127.0.0.1:9091", "127.0.0.1:9092", "127.0.0.1:9093"];
+const NODES: [&str; 2] = ["127.0.0.1:8123","127.0.0.1:9092"];
+
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
@@ -37,6 +40,13 @@ struct Block {
     registered_car: Car,
 }
 
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
+struct Msg {
+    command: u8,
+    data: Vec<u8>
+}
+
 fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) {
     match list_of_blocks.last() {
         Some(last_block) => new_block.prev_hash = last_block.hash,
@@ -54,7 +64,6 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
 
     bytes.extend(&new_block.id.to_be_bytes());
     bytes.extend(&new_block.prev_hash);
-    bytes.extend(&new_block.nonce.to_be_bytes());
     bytes.extend(&serialize(&new_block.registered_car).unwrap());
 
     let mut nonce: u32 = 0;
@@ -78,32 +87,76 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
 }
 
 
+fn verify_block(data: &Vec<u8>, mut stream: TcpStream) {
+    let block = deserialize::<Block>(data).expect("Error while reading block from message");
+
+    println!("Verifying block: {:?}", block);
+
+    let mut bytes: Vec<u8> = Vec::new();
+
+    bytes.extend(&block.id.to_be_bytes());
+
+//    let control_prev_hash = match blockchain.last() {
+//        Some(last_block) => last_block.hash,
+//        None => [0;HASH_LEN],
+//    };
+
+//    if control_prev_hash != block.prev_hash{
+//        let msg = Msg{
+//            command: 2,
+//            data: Vec::new()
+//        };
+//        stream.write(&serialize(&msg).unwrap());
+//        return;
+//    }
+
+    bytes.extend(&block.prev_hash);
+    //bytes.extend(&block.nonce.to_be_bytes());
+    bytes.extend(&serialize(&block.registered_car).unwrap());
+
+    let mut sha2_hash = Sha256::new();
+    sha2_hash.update(&bytes);
+    sha2_hash.update(block.nonce.to_be_bytes());
+    let sum = sha2_hash.finalize();
+
+    let msg: Msg;
+
+    if (sum[0]==0) && (sum[1]==0){
+        msg = Msg{
+            command: 1,
+            data: Vec::new()
+        };
+    } else{
+        msg = Msg{
+            command: 2,
+            data: Vec::new()
+        };
+    }
+    match stream.write(&serialize(&msg).unwrap()){
+        Ok(_) => {println!("Sent {} successfuly.", msg.command);}
+        Err(e) => {eprintln!("Error while writing response: {e}");}
+    }
+}
+
 fn handle_incoming(mut stream: TcpStream){
     let mut buff = [0;1280];
     match stream.read(&mut buff) {
         Ok(_d) => {}
         Err(e) => {eprintln!("Error while handling stream: {e}");}
     }
-    println!("{:?}", deserialize::<Block>(&buff).unwrap());
-}
 
-
-fn send(ip: &str, data: &[u8]){
-    let mut stream :TcpStream;
-    match TcpStream::connect(ip){
-        Ok(s) => {stream = s;}
-        Err(e) => {
-            eprintln!("Error connecting to node {ip}, {e}");
-            return;
-        }
+    match deserialize::<Msg>(&buff){
+        Ok(s) => {
+            println!("Received message: {:?}", s);
+            match s.command{
+                0 => {verify_block(&s.data, stream);},
+                2 => {println!("Woow, rejected 2");}
+                _ => {println!("Lmao");}
+            };
+        
+        },
+        Err(e) => {eprintln!("Error while deserializing message: {e}");}
     };
-    match stream.write(data){
-        Ok(_s) => {return;}
-        Err(e) => {
-            eprintln!("Error while writing to stream: {e}");
-            return;
-        }
-    }
 }
 
 
@@ -130,12 +183,49 @@ fn listen(addr: &String){
 
 fn publish_block(block: &Block){
     for node in NODES{
-        send(node, &serialize(block).unwrap());
+        let msg = Msg{
+            command: 0,
+            data: serialize(block).unwrap()
+        };
+
+        let mut stream :TcpStream;
+        let mut buf = [0; 1024];
+
+        match TcpStream::connect(node){
+            Ok(s) => {stream = s;}
+            Err(e) => {
+                eprintln!("Error connecting to node {node}, {e}");
+                continue;
+            }
+        };
+
+        match stream.write(&serialize(&msg).unwrap()){
+            Ok(_s) => {}
+            Err(e) => {
+                eprintln!("Error while writing to stream: {e}");
+                continue;
+            }
+        }
+
+        match stream.read(&mut buf) {
+            Ok(_s) => {}
+            Err(e) => {eprintln!("Error while reading data from stream: {e}");}
+        }
+
+        match deserialize::<Msg>(&buf){
+            Ok(s) => {println!("{:?}", s); }
+            Err(e) => {eprintln!("Error while reading response: {e}");}
+        }
     }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    let listener_thread = thread::spawn(move|| {
+        listen(&args[1]);
+    });
+
 
     let mut blocks: Vec<Block> = Vec::new();
     let new_car = Car{
@@ -183,14 +273,11 @@ fn main() {
     blocks.push(block2);
 
     println!("{:?}", blocks);
-    let listener_thread = thread::spawn(move || {
-        listen(&args[1]);
-    });
 
-    for node in NODES{
-        send(node, &serialize(&blocks[0]).unwrap());
+    match listener_thread.join(){
+        Ok(_) => {}
+        Err(e) => {eprintln!("Error while joining listener thread: {:?}", e);}
     }
-    listener_thread.join().expect("Error while joining listener thread.");
-
+    
 
 }
