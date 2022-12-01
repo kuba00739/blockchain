@@ -3,15 +3,18 @@ use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest,};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+//use tracing_mutex::stdsync::{TracingMutex};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::env;
+use std::time::Duration;
 
 
 use String;
 
 const HASH_LEN: usize = 32;
-const NODES: [&str; 2] = ["127.0.0.1:8123","127.0.0.1:9092"];
+const NODES: [&str; 2] = ["127.0.0.1:9091", "127.0.0.1:9093"];
+const NODE_AMOUNT: u8 = 3;
 
 
 #[derive(Debug)]
@@ -56,16 +59,17 @@ struct Msg {
     data: Vec<u8>
 }
 
-fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) {
+fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) -> u8{
     match list_of_blocks.last() {
         Some(last_block) => new_block.prev_hash = last_block.hash,
         None => new_block.prev_hash = [0;HASH_LEN],
     };
     new_block.id = list_of_blocks.len() as u32;
+    drop(list_of_blocks);
     let calculated = mine_block(new_block);
     new_block.nonce = calculated.0;
     new_block.hash = calculated.1;
-    publish_block(new_block);
+    return publish_block(new_block);
 }
 
 fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
@@ -76,7 +80,6 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
     bytes.extend(&serialize(&new_block.registered_car).unwrap());
 
     let mut nonce: u32 = 0;
-    //let mut finished = false;
 
     while 1==1 {
         let mut sha2_hash = Sha256::new();
@@ -105,7 +108,7 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
 
     bytes.extend(&block.id.to_be_bytes());
 
-    let control_prev_hash = match blockchain.lock().unwrap().last() {
+    let control_prev_hash = match blockchain.try_lock().expect("Couldn't lock blockchain").last() {
         Some(last_block) => last_block.hash,
         None => [0;HASH_LEN],
     };
@@ -122,8 +125,9 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
         return;
     }
 
+    drop(control_prev_hash);
+
     bytes.extend(&block.prev_hash);
-    //bytes.extend(&block.nonce.to_be_bytes());
     bytes.extend(&serialize(&block.registered_car).unwrap());
 
     let mut sha2_hash = Sha256::new();
@@ -134,6 +138,7 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
     let msg: Msg;
 
     if (sum[0]==0) && (sum[1]==0){
+        blockchain.lock().expect("Block accepted but lock failed").push(block);
         msg = Msg{
             command: Comm::Accepted,
             data: Vec::new()
@@ -182,7 +187,7 @@ fn listen(addr: &String, blockchain: Arc<Mutex<Vec<Block>>>){
 
         let thr = thread::spawn({
             let blockchain_clone = blockchain.clone();
-            || {
+            move || {
                 handle_incoming(stream, blockchain_clone);
             }
         });
@@ -196,15 +201,34 @@ fn listen(addr: &String, blockchain: Arc<Mutex<Vec<Block>>>){
 
 }
 
-fn publish_block(block: &Block){
+fn send_message(mut stream: TcpStream, msg: Msg) -> Result<[u8; 1280],&'static str>{
+    let mut buf = [0; 1280]; 
+
+    stream.set_write_timeout(Some(Duration::new(5, 0))).expect("Couldn't set timeout");
+    match stream.write(&serialize(&msg).unwrap()){
+        Ok(_s) => {}
+        Err(e) => {
+            eprintln!("Error while writing to stream: {e}");
+            return Err("Error connecting to node")
+        }
+    }
+    
+    //stream.set_read_timeout(Some(Duration::new(5, 0))).unwrap();
+    match stream.read(&mut buf) {
+        Ok(_s) => {Ok(buf)}
+        Err(e) => {eprintln!("Error while reading data from stream: {e}"); Err("Error reading data")}
+    }
+}
+
+fn publish_block(block: &Block) -> u8{
+    let mut node_count: u8 = 0;
     for node in NODES{
         let msg = Msg{
             command: Comm::NewBlock,
             data: serialize(block).unwrap()
         };
 
-        let mut stream :TcpStream;
-        let mut buf = [0; 1024];
+        let stream :TcpStream;
 
         match TcpStream::connect(node){
             Ok(s) => {stream = s;}
@@ -214,24 +238,20 @@ fn publish_block(block: &Block){
             }
         };
 
-        match stream.write(&serialize(&msg).unwrap()){
-            Ok(_s) => {}
-            Err(e) => {
-                eprintln!("Error while writing to stream: {e}");
-                continue;
-            }
-        }
-
-        match stream.read(&mut buf) {
-            Ok(_s) => {}
-            Err(e) => {eprintln!("Error while reading data from stream: {e}");}
-        }
+        let buf = send_message(stream, msg).expect("Couldn't publish block to one of the nodes");
 
         match deserialize::<Msg>(&buf){
-            Ok(s) => {println!("{:?}", s); }
+            Ok(s) => {
+                println!("{:?}", s); 
+                match s.command{
+                    Comm::Accepted => {node_count += 1;}
+                    _ => {}
+                }
+        }
             Err(e) => {eprintln!("Error while reading response: {e}");}
         }
     }
+    return node_count;
 }
 
 fn main() {
@@ -287,17 +307,23 @@ fn main() {
         registered_car: one_more_car
     };
 
-    calculate_block(&mut block, &blocks.lock().unwrap());
-    blocks.lock().unwrap().push(block);
-    calculate_block(&mut block2, &blocks.lock().unwrap());
-    blocks.lock().unwrap().push(block2);
+    if (calculate_block(&mut block, &blocks.try_lock().expect("Coulnd't lock block")) as f64)/(NODE_AMOUNT as f64) >= 0.5 {
+        blocks.try_lock().expect("Couldn't block").push(block);
+    }
+    if (calculate_block(&mut block2, &blocks.try_lock().expect("Couln't block")) as f64)/(NODE_AMOUNT as f64) >= 0.5 {
+        blocks.try_lock().expect("msLOOOOLg").push(block2);
+    }
 
-    println!("{:?}", blocks);
+
+    //drop(blocks);
 
     match listener_thread.join(){
         Ok(_) => {}
         Err(e) => {eprintln!("Error while joining listener thread: {:?}", e);}
     }
+
+
+    println!("{:?}", blocks.lock().expect("Failed to lock"));
     
 
 }
