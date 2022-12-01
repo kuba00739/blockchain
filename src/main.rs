@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest,};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-//use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::env;
 
@@ -96,7 +96,7 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8;HASH_LEN]){
 }
 
 
-fn verify_block(data: &Vec<u8>, mut stream: TcpStream) {
+fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>) {
     let block = deserialize::<Block>(data).expect("Error while reading block from message");
 
     println!("Verifying block: {:?}", block);
@@ -105,19 +105,22 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream) {
 
     bytes.extend(&block.id.to_be_bytes());
 
-//    let control_prev_hash = match blockchain.last() {
-//        Some(last_block) => last_block.hash,
-//        None => [0;HASH_LEN],
-//    };
+    let control_prev_hash = match blockchain.lock().unwrap().last() {
+        Some(last_block) => last_block.hash,
+        None => [0;HASH_LEN],
+    };
 
-//    if control_prev_hash != block.prev_hash{
-//        let msg = Msg{
-//            command: 2,
-//            data: Vec::new()
-//        };
-//        stream.write(&serialize(&msg).unwrap());
-//        return;
-//    }
+    if control_prev_hash != block.prev_hash{
+        let msg = Msg{
+            command: Comm::Rejected,
+            data: Vec::new()
+        };
+        match stream.write(&serialize(&msg).unwrap()){
+            Ok(_) => {}
+            Err(e) => {eprintln!("Failed to send a message: {e}");}
+        }
+        return;
+    }
 
     bytes.extend(&block.prev_hash);
     //bytes.extend(&block.nonce.to_be_bytes());
@@ -147,7 +150,7 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream) {
     }
 }
 
-fn handle_incoming(mut stream: TcpStream){
+fn handle_incoming(mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>){
     let mut buff = [0;1280];
     match stream.read(&mut buff) {
         Ok(_d) => {}
@@ -158,7 +161,7 @@ fn handle_incoming(mut stream: TcpStream){
         Ok(s) => {
             println!("Received message: {:?}", s);
             match s.command{
-                Comm::NewBlock => {verify_block(&s.data, stream);},
+                Comm::NewBlock => {verify_block(&s.data, stream, blockchain);},
                 Comm::Rejected => {println!("Woow, rejected 2");}
                 _ => {println!("Lmao");}
             };
@@ -169,7 +172,7 @@ fn handle_incoming(mut stream: TcpStream){
 }
 
 
-fn listen(addr: &String){
+fn listen(addr: &String, blockchain: Arc<Mutex<Vec<Block>>>){
     let listener = TcpListener::bind(addr).unwrap();
 
     for stream in listener.incoming(){
@@ -177,8 +180,11 @@ fn listen(addr: &String){
         let peer_addr = stream.peer_addr().unwrap();
         println!("Remote connection from {:#?}", peer_addr);
 
-        let thr = thread::spawn(|| {
-            handle_incoming(stream);
+        let thr = thread::spawn({
+            let blockchain_clone = blockchain.clone();
+            || {
+                handle_incoming(stream, blockchain_clone);
+            }
         });
         match thr.join(){
             Ok(_s) => {println!("Remote connection with {:#?} closed", peer_addr);}
@@ -230,13 +236,18 @@ fn publish_block(block: &Block){
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let blocks: Arc<Mutex<Vec<Block>>>  = Arc::new(Mutex::new(Vec::new()));
 
-    let listener_thread = thread::spawn(move|| {
-        listen(&args[1]);
-    });
+    let listener_thread = thread::spawn(
+        {
+            let blocks_clone = blocks.clone();
+            move || {
+                listen(&args[1], blocks_clone);
+            }
+        }
+    );
 
 
-    let mut blocks: Vec<Block> = Vec::new();
     let new_car = Car{
         owner_name: String::from("Jakub"),
         owner_surname: String::from("Niezabitowski"),
@@ -276,10 +287,10 @@ fn main() {
         registered_car: one_more_car
     };
 
-    calculate_block(&mut block, &blocks);
-    blocks.push(block);
-    calculate_block(&mut block2, &blocks);
-    blocks.push(block2);
+    calculate_block(&mut block, &blocks.lock().unwrap());
+    blocks.lock().unwrap().push(block);
+    calculate_block(&mut block2, &blocks.lock().unwrap());
+    blocks.lock().unwrap().push(block2);
 
     println!("{:?}", blocks);
 
