@@ -42,8 +42,17 @@ struct Block {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
+enum Comm {
+    NewBlock,
+    Accepted,
+    Rejected
+}
+
+
+#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct Msg {
-    command: u8,
+    command: Comm,
     data: Vec<u8>
 }
 
@@ -123,17 +132,17 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream) {
 
     if (sum[0]==0) && (sum[1]==0){
         msg = Msg{
-            command: 1,
+            command: Comm::Accepted,
             data: Vec::new()
         };
     } else{
         msg = Msg{
-            command: 2,
+            command: Comm::Rejected,
             data: Vec::new()
         };
     }
     match stream.write(&serialize(&msg).unwrap()){
-        Ok(_) => {println!("Sent {} successfuly.", msg.command);}
+        Ok(_) => {println!("Sent {:?} successfuly.", msg.command);}
         Err(e) => {eprintln!("Error while writing response: {e}");}
     }
 }
@@ -149,8 +158,8 @@ fn handle_incoming(mut stream: TcpStream){
         Ok(s) => {
             println!("Received message: {:?}", s);
             match s.command{
-                0 => {verify_block(&s.data, stream);},
-                2 => {println!("Woow, rejected 2");}
+                Comm::NewBlock => {verify_block(&s.data, stream);},
+                Comm::Rejected => {println!("Woow, rejected 2");}
                 _ => {println!("Lmao");}
             };
         
@@ -184,7 +193,7 @@ fn listen(addr: &String){
 fn publish_block(block: &Block){
     for node in NODES{
         let msg = Msg{
-            command: 0,
+            command: Comm::NewBlock,
             data: serialize(block).unwrap()
         };
 
