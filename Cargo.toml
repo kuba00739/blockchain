@@ -1,5 +1,5 @@
 [workspace]
-members = ["node", "lib"]
+members = ["node", "lib", "client"]
 
 #[package]
 #name = "blockchain"

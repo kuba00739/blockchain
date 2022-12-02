@@ -3,7 +3,6 @@ use lib::Block;
 use lib::Comm;
 use lib::Msg;
 use lib::Vin;
-//use lib::send_message;
 use bincode::{deserialize, serialize};
 use lib::Car;
 use rand::Rng;
