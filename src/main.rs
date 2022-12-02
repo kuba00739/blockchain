@@ -3,6 +3,7 @@ mod network;
 use crate::network::listen;
 use crate::network::send_message;
 use bincode::{deserialize, serialize};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
@@ -10,12 +11,12 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use String;
 
 const HASH_LEN: usize = 32;
-const NODES: [&str; 2] = ["127.0.0.1:9092", "127.0.0.1:9093"];
-const NODE_AMOUNT: u8 = 3;
+const NODE_AMOUNT: u8 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Vin {
@@ -53,7 +54,7 @@ pub struct Msg {
     data: Vec<u8>,
 }
 
-fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) -> u8 {
+fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>, nodes: &str) -> u8 {
     match list_of_blocks.last() {
         Some(last_block) => new_block.prev_hash = last_block.hash,
         None => new_block.prev_hash = [0; HASH_LEN],
@@ -63,7 +64,7 @@ fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>) -> u8 {
     let calculated = mine_block(new_block);
     new_block.nonce = calculated.0;
     new_block.hash = calculated.1;
-    return publish_block(new_block);
+    return publish_block(new_block, nodes);
 }
 
 fn mine_block(new_block: &mut Block) -> (u32, [u8; HASH_LEN]) {
@@ -147,6 +148,12 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
             data: Vec::new(),
         };
     }
+    match stream.set_write_timeout(Some(Duration::new(5, 0))) {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("Error while sending response {e}");
+        }
+    }
     match stream.write(&serialize(&msg).unwrap()) {
         Ok(_) => {
             println!("Sent {:?} successfuly.", msg.command);
@@ -157,9 +164,9 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
     }
 }
 
-fn publish_block(block: &Block) -> u8 {
+fn publish_block(block: &Block, nodes: &str) -> u8 {
     let mut node_count: u8 = 0;
-    for node in NODES {
+    for node in nodes.split(",") {
         let msg = Msg {
             command: Comm::NewBlock,
             data: serialize(block).unwrap(),
@@ -177,7 +184,12 @@ fn publish_block(block: &Block) -> u8 {
             }
         };
 
-        let buf = send_message(stream, msg).expect("Couldn't publish block to one of the nodes");
+        let buf = match send_message(stream, msg) {
+            Ok(s) => s,
+            Err(_) => {
+                continue;
+            }
+        };
 
         match deserialize::<Msg>(&buf) {
             Ok(s) => {
@@ -198,13 +210,14 @@ fn publish_block(block: &Block) -> u8 {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let nodes = env::var("NODES").expect("Couldn't access NODES env variable.");
+
     let blocks: Arc<Mutex<Vec<Block>>> = Arc::new(Mutex::new(Vec::new()));
 
     let listener_thread = thread::spawn({
         let blocks_clone = blocks.clone();
         move || {
-            listen(&args[1], blocks_clone);
+            listen(blocks_clone);
         }
     });
 
@@ -247,19 +260,30 @@ fn main() {
         registered_car: one_more_car,
     };
 
-    if (calculate_block(&mut block, &blocks.lock().expect("Coulnd't lock block")) as f64)
+    let mut rng = rand::thread_rng();
+    thread::sleep(Duration::new(rng.gen_range(0..10), 0));
+
+    if (calculate_block(
+        &mut block,
+        &blocks.lock().expect("Coulnd't lock block"),
+        &nodes,
+    ) as f64)
         / (NODE_AMOUNT as f64)
         >= 0.5
     {
         blocks.lock().expect("Couldn't block").push(block);
     }
-    if (calculate_block(&mut block2, &blocks.lock().expect("Couln't block")) as f64)
+
+    thread::sleep(Duration::new(rng.gen_range(0..10), 0));
+    if (calculate_block(&mut block2, &blocks.lock().expect("Couln't block"), &nodes) as f64)
         / (NODE_AMOUNT as f64)
         >= 0.5
     {
         blocks.lock().expect("msLOOOOLg").push(block2);
     }
 
+    thread::sleep(Duration::new(rng.gen_range(0..10), 0));
+    println!("Blocks {:?}", &blocks.lock().expect("Couldn't lock file"));
     //drop(blocks);
 
     match listener_thread.join() {

@@ -34,8 +34,8 @@ pub fn send_message(mut stream: TcpStream, msg: Msg) -> Result<[u8; 1280], &'sta
     }
 }
 
-pub fn listen(addr: &String, blockchain: Arc<Mutex<Vec<Block>>>) {
-    let listener = TcpListener::bind(addr).unwrap();
+pub fn listen(blockchain: Arc<Mutex<Vec<Block>>>) {
+    let listener = TcpListener::bind("0.0.0.0:9000").unwrap();
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();

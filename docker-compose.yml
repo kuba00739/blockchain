@@ -1,0 +1,42 @@
+version: "3.9"
+services:
+
+  blockchain-proj:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000 #,10.6.7.4:9000
+    container_name: "node-1"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.2
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.2:9000 #,10.6.7.2:9000
+    container_name: "node-2"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.3
+          #  node3:
+          #    build:
+          #      context: .
+          #      dockerfile: Dockerfile
+          #    environment:
+          #      - NODES=10.6.7.3:9000,10.6.7.2:9000
+          #    container_name: "node-3"
+          #    networks:
+          #      node-net:
+          #        ipv4_address: 10.6.7.4
+
+
+networks:
+  node-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.6.7.0/24
+          gateway: 10.6.7.1
