@@ -6,7 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - NODES=10.6.7.3:9000 #,10.6.7.4:9000
+      - NODES=10.6.7.3:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+
     container_name: "node-1"
     networks:
       node-net:
@@ -16,21 +17,79 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - NODES=10.6.7.2:9000 #,10.6.7.2:9000
+      - NODES=10.6.7.4:9000,10.6.7.2:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+
     container_name: "node-2"
     networks:
       node-net:
         ipv4_address: 10.6.7.3
-          #  node3:
-          #    build:
-          #      context: .
-          #      dockerfile: Dockerfile
-          #    environment:
-          #      - NODES=10.6.7.3:9000,10.6.7.2:9000
-          #    container_name: "node-3"
-          #    networks:
-          #      node-net:
-          #        ipv4_address: 10.6.7.4
+  node3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+
+    container_name: "node-3"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.4
+  node4:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+
+    container_name: "node-4"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.5
+  node5:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.9:9000,10.6.7.7:9000,10.6.7.8:9000
+
+    container_name: "node-5"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.6
+  node6:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.9:9000,10.6.7.8:9000
+
+    container_name: "node-6"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.7
+  node7:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.9:9000
+
+    container_name: "node-7"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.8
+  node8:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000
+    container_name: "node-8"
+    networks:
+      node-net:
+        ipv4_address: 10.6.7.9
+
+
 
 
 networks:

@@ -16,7 +16,6 @@ use std::time::Duration;
 use String;
 
 const HASH_LEN: usize = 32;
-const NODE_AMOUNT: u8 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Vin {
@@ -211,6 +210,7 @@ fn publish_block(block: &Block, nodes: &str) -> u8 {
 
 fn main() {
     let nodes = env::var("NODES").expect("Couldn't access NODES env variable.");
+    let nodes_vec: Vec<&str> = nodes.split(",").collect();
 
     let blocks: Arc<Mutex<Vec<Block>>> = Arc::new(Mutex::new(Vec::new()));
 
@@ -261,14 +261,14 @@ fn main() {
     };
 
     let mut rng = rand::thread_rng();
-    thread::sleep(Duration::new(rng.gen_range(0..10), 0));
+    thread::sleep(Duration::new(rng.gen_range(2..10), 0));
 
     if (calculate_block(
         &mut block,
         &blocks.lock().expect("Coulnd't lock block"),
         &nodes,
     ) as f64)
-        / (NODE_AMOUNT as f64)
+        / (nodes_vec.len() as f64)
         >= 0.5
     {
         blocks.lock().expect("Couldn't block").push(block);
@@ -276,7 +276,7 @@ fn main() {
 
     thread::sleep(Duration::new(rng.gen_range(0..10), 0));
     if (calculate_block(&mut block2, &blocks.lock().expect("Couln't block"), &nodes) as f64)
-        / (NODE_AMOUNT as f64)
+        / (nodes_vec.len() as f64)
         >= 0.5
     {
         blocks.lock().expect("msLOOOOLg").push(block2);
