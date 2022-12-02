@@ -1,13 +1,14 @@
-mod network;
-
-use crate::network::listen;
-use crate::network::send_message;
+use lib::listen;
+use lib::Block;
+use lib::Comm;
+use lib::Msg;
+use lib::Vin;
+//use lib::send_message;
 use bincode::{deserialize, serialize};
+use lib::Car;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::env;
-use std::io::Write;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -16,42 +17,6 @@ use std::time::Duration;
 use String;
 
 const HASH_LEN: usize = 32;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Vin {
-    wmi: String,
-    vds: String,
-    vis: String,
-}
-#[derive(Debug, Serialize, Deserialize)]
-struct Car {
-    owner_name: String,
-    owner_surname: String,
-    distance_traveled: u32,
-    vin_number: Vin,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Block {
-    hash: [u8; HASH_LEN],
-    id: u32,
-    prev_hash: [u8; HASH_LEN],
-    nonce: u32,
-    registered_car: Car,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-enum Comm {
-    NewBlock,
-    Accepted,
-    Rejected,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Msg {
-    command: Comm,
-    data: Vec<u8>,
-}
 
 fn calculate_block(new_block: &mut Block, list_of_blocks: &Vec<Block>, nodes: &str) -> u8 {
     match list_of_blocks.last() {
@@ -92,77 +57,6 @@ fn mine_block(new_block: &mut Block) -> (u32, [u8; HASH_LEN]) {
     (0, [0; HASH_LEN])
 }
 
-fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>) {
-    let block = deserialize::<Block>(data).expect("Error while reading block from message");
-
-    println!("Verifying block: {:?}", block);
-
-    let mut bytes: Vec<u8> = Vec::new();
-
-    bytes.extend(&block.id.to_be_bytes());
-
-    let control_prev_hash = match blockchain.lock().expect("Couldn't lock blockchain").last() {
-        Some(last_block) => last_block.hash,
-        None => [0; HASH_LEN],
-    };
-
-    if control_prev_hash != block.prev_hash {
-        let msg = Msg {
-            command: Comm::Rejected,
-            data: Vec::new(),
-        };
-        match stream.write(&serialize(&msg).unwrap()) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Failed to send a message: {e}");
-            }
-        }
-        return;
-    }
-
-    drop(control_prev_hash);
-
-    bytes.extend(&block.prev_hash);
-    bytes.extend(&serialize(&block.registered_car).unwrap());
-
-    let mut sha2_hash = Sha256::new();
-    sha2_hash.update(&bytes);
-    sha2_hash.update(block.nonce.to_be_bytes());
-    let sum = sha2_hash.finalize();
-
-    let msg: Msg;
-
-    if (sum[0] == 0) && (sum[1] == 0) {
-        blockchain
-            .lock()
-            .expect("Block accepted but lock failed")
-            .push(block);
-        msg = Msg {
-            command: Comm::Accepted,
-            data: Vec::new(),
-        };
-    } else {
-        msg = Msg {
-            command: Comm::Rejected,
-            data: Vec::new(),
-        };
-    }
-    match stream.set_write_timeout(Some(Duration::new(5, 0))) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Error while sending response {e}");
-        }
-    }
-    match stream.write(&serialize(&msg).unwrap()) {
-        Ok(_) => {
-            println!("Sent {:?} successfuly.", msg.command);
-        }
-        Err(e) => {
-            eprintln!("Error while writing response: {e}");
-        }
-    }
-}
-
 fn publish_block(block: &Block, nodes: &str) -> u8 {
     let mut node_count: u8 = 0;
     for node in nodes.split(",") {
@@ -183,7 +77,7 @@ fn publish_block(block: &Block, nodes: &str) -> u8 {
             }
         };
 
-        let buf = match send_message(stream, msg) {
+        let buf = match lib::send_message(stream, msg) {
             Ok(s) => s,
             Err(_) => {
                 continue;
@@ -221,29 +115,35 @@ fn main() {
         }
     });
 
-    let new_car = Car {
-        owner_name: String::from("Jakub"),
-        owner_surname: String::from("Niezabitowski"),
-        distance_traveled: 10000,
-        vin_number: Vin {
-            wmi: "1HG".to_string(),
-            vds: "CM8263".to_string(),
-            vis: "3A004352".to_string(),
-        },
-    };
+    let new_car = Car::new(
+        Some(String::from("Jakub")),
+        Some(String::from("Niezabitowski")),
+        Some(10000),
+        Some(Vin::new(None, None, None)),
+    );
 
-    let one_more_car = Car {
-        owner_name: String::from("Jakub"),
-        owner_surname: String::from("Niezabitowski"),
-        distance_traveled: 130000,
-        vin_number: Vin {
-            wmi: "2HG".to_string(),
-            vds: "C482G3".to_string(),
-            vis: "3A114352".to_string(),
-        },
-    };
+    let one_more_car = Car::new(
+        Some(String::from("Jakub")),
+        Some(String::from("Niezabitowski")),
+        Some(130000),
+        Some(Vin::new(
+            Some("2HG".to_string()),
+            Some("C482G3".to_string()),
+            Some("3A114352".to_string()),
+        )),
+    );
 
-    println!("New Car: {:?}", new_car);
+    let last_car = Car::new(
+        Some(String::from("Third")),
+        Some(String::from("Car")),
+        Some(130000),
+        Some(Vin::new(
+            Some("2HG".to_string()),
+            Some("C482G3".to_string()),
+            Some("3A114352".to_string()),
+        )),
+    );
+
     let mut block = Block {
         hash: [0; HASH_LEN],
         id: 0,
@@ -258,6 +158,14 @@ fn main() {
         prev_hash: [0; HASH_LEN],
         nonce: 0,
         registered_car: one_more_car,
+    };
+
+    let mut block3 = Block {
+        hash: [0; HASH_LEN],
+        id: 0,
+        prev_hash: [0; HASH_LEN],
+        nonce: 0,
+        registered_car: last_car,
     };
 
     let mut rng = rand::thread_rng();
@@ -283,8 +191,21 @@ fn main() {
     }
 
     thread::sleep(Duration::new(rng.gen_range(0..10), 0));
-    println!("Blocks {:?}", &blocks.lock().expect("Couldn't lock file"));
+    if (calculate_block(&mut block3, &blocks.lock().expect("Couln't block"), &nodes) as f64)
+        / (nodes_vec.len() as f64)
+        >= 0.5
+    {
+        blocks.lock().expect("msLOOOOLg").push(block3);
+    }
+
+    //thread::sleep(Duration::new(rng.gen_range(0..10), 0));
+    //println!("Blocks {:?}", &blocks.lock().expect("Couldn't lock file"));
     //drop(blocks);
+
+    println!(
+        "Final len: {}",
+        blocks.lock().expect("Failed to lock").len()
+    );
 
     match listener_thread.join() {
         Ok(_) => {}
@@ -292,6 +213,4 @@ fn main() {
             eprintln!("Error while joining listener thread: {:?}", e);
         }
     }
-
-    println!("{:?}", blocks.lock().expect("Failed to lock"));
 }

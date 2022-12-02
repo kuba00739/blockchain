@@ -7,4 +7,4 @@ COPY ./ /app
 
 RUN cargo build --release
 
-ENTRYPOINT ["/app/target/release/blockchain"]
+ENTRYPOINT ["/app/target/release/node"]
