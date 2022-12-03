@@ -71,7 +71,7 @@ fn main() {
     });
 
     for msg in rx_main {
-        debug!("Received msg: {:?}", msg);
+        debug!("Received msg: {:#?}", msg);
         match msg.command {
             Comm::Broadcast => {
                 broadcast_chain(&blocks, &nodes_vec);
@@ -83,7 +83,7 @@ fn main() {
             block_pending.1 = 0;
         }
         if (block_pending.1 as f64) / (nodes_vec.len() as f64) >= 0.5 {
-            info!("Accepting block: {:?}", block_pending.0);
+            info!("Accepting block: {:#?}", block_pending.0);
             blocks.push(block_pending.0.clone());
             block_pending.1 = 0;
         }

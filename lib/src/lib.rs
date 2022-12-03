@@ -100,7 +100,7 @@ fn verify_block(block: Block) -> Result<Block, &'static str> {
 }
 
 fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    debug!("Verifying block: {:?}", block);
+    debug!("Verifying block: {:#?}", block);
 
     let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
         [0; HASH_LEN]
@@ -116,7 +116,7 @@ fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Blo
 }
 
 fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    debug!("Verifying block: {:?}", block);
+    debug!("Verifying block: {:#?}", block);
 
     if (block.id as usize) != blockchain.len() {
         return Err("Block ID don't match blockchain lenght.");
@@ -263,7 +263,7 @@ pub fn handle_msg(
             mint_block(&msg, blockchain, block_pending, nodes, node_name);
         }
         Comm::PrintChain => {
-            info!("Current blockchain status: {:?}", blockchain);
+            info!("Current blockchain status: {:#?}", blockchain);
         }
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
@@ -315,7 +315,7 @@ fn handle_incoming(mut stream: TcpStream, tx: Sender<Msg>) {
 
     match deserialize::<Msg>(&buff) {
         Ok(s) => {
-            debug!("Received message: {:?}", s);
+            debug!("Received message: {:#?}", s);
             tx.send(s).expect("Error while sending message via channel");
         }
         Err(e) => {
