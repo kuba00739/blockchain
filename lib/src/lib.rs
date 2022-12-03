@@ -271,7 +271,7 @@ pub fn handle_msg(
                 *blockchain = s;
             }
             Err(e) => {
-                error!("New blockchain verification failed: {e}");
+                warn!("New blockchain verification failed: {e}");
             }
         },
 
@@ -285,7 +285,7 @@ pub fn listen(tx: Sender<Msg>) {
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         let peer_addr = stream.peer_addr().unwrap();
-        info!("Remote connection from {:#?}", peer_addr);
+        debug!("Remote connection from {:#?}", peer_addr);
 
         let thr = thread::spawn({
             let tx1 = tx.clone();
@@ -295,7 +295,7 @@ pub fn listen(tx: Sender<Msg>) {
         });
         match thr.join() {
             Ok(_s) => {
-                info!("Remote connection with {:#?} closed", peer_addr);
+                debug!("Remote connection with {:#?} closed", peer_addr);
             }
             Err(e) => {
                 error!("Error while joining thread: {:#?}", e);

@@ -1,12 +1,11 @@
-use lib::broadcast_chain;
-use lib::handle_msg;
-use lib::listen;
-use lib::Block;
-use lib::Car;
-use lib::Comm;
-use lib::Msg;
-use log::info;
+use chrono::Local;
+use env_logger::Builder;
+use lib::{broadcast_chain, handle_msg, listen};
+use lib::{Block, Car, Comm, Msg};
+use log::LevelFilter;
+use log::{debug, info};
 use std::env;
+use std::io::Write;
 use std::sync::mpsc;
 use std::thread;
 use std::thread::sleep;
@@ -17,6 +16,19 @@ const HASH_LEN: usize = 32;
 //TODO- new thread for block mining: Can use handle_new_block
 
 fn main() {
+    Builder::new()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] - {}",
+                Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        .init();
+
     let (tx_listener, rx_main) = mpsc::channel::<Msg>();
 
     let nodes = env::var("NODES").expect("Couldn't access NODES env variable.");
@@ -59,7 +71,7 @@ fn main() {
     });
 
     for msg in rx_main {
-        println!("Received msg: {:?}", msg);
+        debug!("Received msg: {:?}", msg);
         match msg.command {
             Comm::Broadcast => {
                 broadcast_chain(&blocks, &nodes_vec);
