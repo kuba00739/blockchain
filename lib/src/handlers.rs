@@ -1,4 +1,4 @@
-use log::{info, warn};
+use log::{debug, warn};
 
 use crate::send_all;
 use crate::verify_broadcasted_block;
@@ -18,7 +18,7 @@ pub fn handle_new_block(
     match deserialize::<Block>(&msg.data) {
         Ok(s) => {
             if (s.id as usize) != blockchain.len() {
-                warn!("Block ID didn't match!");
+                debug!("Block ID didn't match!");
                 return;
             }
             match verify_new_block(s, blockchain) {
@@ -34,7 +34,7 @@ pub fn handle_new_block(
                     *block_pending = (s, 1);
                 }
                 Err(e) => {
-                    info!("Verification failed: {e}");
+                    debug!("Verification failed: {e}");
                 }
             }
         }

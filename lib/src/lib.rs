@@ -4,6 +4,7 @@ use bincode::serialize;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fmt;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::Sender;
@@ -26,7 +27,7 @@ pub struct Car {
     vin_number: Vin,
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Block {
     pub hash: [u8; HASH_LEN],
     pub id: u32,
@@ -80,6 +81,44 @@ impl Vin {
     }
 }
 
+fn format_hash(hash: [u8; HASH_LEN]) -> String {
+    let mut formatted = String::new();
+    for i in &hash[0..8] {
+        formatted += &format!("{:x}", i).to_string();
+    }
+    formatted += &"...".to_string();
+    formatted
+}
+
+impl fmt::Display for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Car owner: {} {}]\n",
+            self.id,
+            format_hash(self.hash),
+            format_hash(self.prev_hash),
+            self.mined_by,
+            self.registered_car.owner_name,
+            self.registered_car.owner_surname
+        )
+    }
+}
+
+impl fmt::Debug for Block {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Nonce: {}]\n",
+            self.id,
+            format_hash(self.hash),
+            format_hash(self.prev_hash),
+            self.mined_by,
+            self.nonce
+        )
+    }
+}
+
 fn verify_block(block: Block) -> Result<Block, &'static str> {
     let mut bytes: Vec<u8> = Vec::new();
     bytes.extend(&block.id.to_be_bytes());
@@ -100,7 +139,7 @@ fn verify_block(block: Block) -> Result<Block, &'static str> {
 }
 
 fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    debug!("Verifying block: {:#?}", block);
+    debug!("Verifying block: {block}");
 
     let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
         [0; HASH_LEN]
@@ -116,7 +155,7 @@ fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Blo
 }
 
 fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    debug!("Verifying block: {:#?}", block);
+    debug!("Verifying block: {block}");
 
     if (block.id as usize) != blockchain.len() {
         return Err("Block ID don't match blockchain lenght.");
@@ -263,7 +302,7 @@ pub fn handle_msg(
             mint_block(&msg, blockchain, block_pending, nodes, node_name);
         }
         Comm::PrintChain => {
-            info!("Current blockchain status: {:#?}", blockchain);
+            info!("Current blockchain status: \n{:?}", blockchain);
         }
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
@@ -271,7 +310,7 @@ pub fn handle_msg(
                 *blockchain = s;
             }
             Err(e) => {
-                warn!("New blockchain verification failed: {e}");
+                debug!("New blockchain verification failed: {e}");
             }
         },
 

@@ -89,6 +89,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "lib",
+ "rand",
 ]
 
 [[package]]
@@ -245,6 +246,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-literal"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
+
+[[package]]
 name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,6 +317,7 @@ name = "lib"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "hex-literal",
  "log",
  "serde",
  "sha2",
@@ -317,9 +325,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.137"
+version = "0.2.138"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc7fcc620a3bff7cdd7a365be3376c97191aeaccc2a603e600951e452615bf89"
+checksum = "db6d7e329c562c5dfab7a46a2afabc8b987ab9a4834c9d1ca04dc54c1546cef8"
 
 [[package]]
 name = "link-cplusplus"
@@ -362,7 +370,6 @@ dependencies = [
  "log",
  "rand",
  "serde",
- "sha2",
 ]
 
 [[package]]

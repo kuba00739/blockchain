@@ -3,7 +3,12 @@ use lib::send_all;
 use lib::Car;
 use lib::Comm;
 use lib::Msg;
+use rand::Rng;
 use std::env;
+
+static NAMES: [&str; 10] = [
+    "James", "Oliver", "Max", "Muller", "Bravo", "Fox", "Jimmy", "Jakub", "Willy", "Billy",
+];
 
 fn main() {
     let nodes = match env::var("NODES") {
@@ -12,12 +17,14 @@ fn main() {
             panic!("MISSING NODES ENVVAR");
         }
     };
+
+    let mut rng = rand::thread_rng();
     let nodes_vec: Vec<&str> = nodes.split(",").collect();
 
     let new_car = Car::new(
-        Some("Jakub".to_string()),
-        Some("Niezabitowski".to_string()),
-        Some(10000),
+        Some(NAMES[rng.gen_range(0..9)].to_string()),
+        Some(NAMES[rng.gen_range(0..9)].to_string()),
+        Some(rng.gen_range(0..1000000)),
         None,
     );
 
@@ -31,14 +38,6 @@ fn main() {
             },
             &nodes_vec,
         )
-    } else if &argv[1] == "RETURN_BLOCKCHAIN" {
-        send_all(
-            Msg {
-                command: Comm::Blockchain,
-                data: Vec::new(),
-            },
-            &nodes_vec,
-        );
     } else {
         send_all(
             Msg {
