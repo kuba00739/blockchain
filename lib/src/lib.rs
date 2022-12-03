@@ -4,20 +4,19 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 
-use std::sync::{Arc, Mutex};
-
 const HASH_LEN: usize = 32;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Vin {
     wmi: String,
     vds: String,
     vis: String,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Car {
     owner_name: String,
     owner_surname: String,
@@ -25,7 +24,7 @@ pub struct Car {
     vin_number: Vin,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct Block {
     pub hash: [u8; HASH_LEN],
     pub id: u32,
@@ -39,6 +38,7 @@ pub enum Comm {
     NewBlock,
     Accepted,
     Rejected,
+    DataToBlock,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -74,35 +74,21 @@ impl Vin {
     }
 }
 
-fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>) {
-    let block = deserialize::<Block>(data).expect("Error while reading block from message");
-
+fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
     println!("Verifying block: {:?}", block);
 
     let mut bytes: Vec<u8> = Vec::new();
 
     bytes.extend(&block.id.to_be_bytes());
 
-    let control_prev_hash = match blockchain.lock().expect("Couldn't lock blockchain").last() {
+    let control_prev_hash = match blockchain.last() {
         Some(last_block) => last_block.hash,
         None => [0; HASH_LEN],
     };
 
     if control_prev_hash != block.prev_hash {
-        let msg = Msg {
-            command: Comm::Rejected,
-            data: Vec::new(),
-        };
-        match stream.write(&serialize(&msg).unwrap()) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Failed to send a message: {e}");
-            }
-        }
-        return;
+        return Err("Previous hash don't match!");
     }
-
-    drop(control_prev_hash);
 
     bytes.extend(&block.prev_hash);
     bytes.extend(&serialize(&block.registered_car).unwrap());
@@ -112,64 +98,173 @@ fn verify_block(data: &Vec<u8>, mut stream: TcpStream, blockchain: Arc<Mutex<Vec
     sha2_hash.update(block.nonce.to_be_bytes());
     let sum = sha2_hash.finalize();
 
-    let msg: Msg;
-
     if (sum[0] == 0) && (sum[1] == 0) {
-        blockchain
-            .lock()
-            .expect("Block accepted but lock failed")
-            .push(block);
-        msg = Msg {
-            command: Comm::Accepted,
-            data: Vec::new(),
-        };
-    } else {
-        msg = Msg {
-            command: Comm::Rejected,
-            data: Vec::new(),
-        };
+        return Ok(block);
     }
-    match stream.set_write_timeout(Some(Duration::new(5, 0))) {
-        Ok(_) => {}
-        Err(e) => {
-            eprintln!("Error while sending response {e}");
+    Err("Hash in improper form for this nonce.")
+}
+
+pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
+    for node in nodes {
+        let mut stream: TcpStream;
+        match TcpStream::connect(node) {
+            Ok(s) => {
+                stream = s;
+            }
+            Err(e) => {
+                eprintln!("Error connecting to node {node}, {e}");
+                continue;
+            }
+        };
+
+        match stream.set_write_timeout(Some(Duration::new(5, 0))) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("Error setting timeout: {e}");
+                continue;
+            }
         }
-    }
-    match stream.write(&serialize(&msg).unwrap()) {
-        Ok(_) => {
-            println!("Sent {:?} successfuly.", msg.command);
-        }
-        Err(e) => {
-            eprintln!("Error while writing response: {e}");
+
+        match stream.write(&serialize(&msg).unwrap()) {
+            Ok(_s) => {}
+            Err(e) => {
+                eprintln!("Error while writing to stream: {e}");
+                continue;
+            }
         }
     }
 }
 
-pub fn send_message(mut stream: TcpStream, msg: Msg) -> Result<[u8; 1280], &'static str> {
-    let mut buf = [0; 1280];
-
-    stream
-        .set_write_timeout(Some(Duration::new(5, 0)))
-        .expect("Couldn't set timeout");
-    match stream.write(&serialize(&msg).unwrap()) {
-        Ok(_s) => {}
+fn handle_new_block(
+    msg: &Msg,
+    blockchain: &Vec<Block>,
+    nodes: &Vec<&str>,
+    block_pending: &mut (Block, u8),
+) {
+    match deserialize::<Block>(&msg.data) {
+        Ok(s) => match verify_block(s, blockchain) {
+            Ok(s) => {
+                send_all(
+                    Msg {
+                        command: Comm::Accepted,
+                        data: serialize(&s).unwrap(),
+                    },
+                    nodes,
+                );
+                *block_pending = (s, 0);
+            }
+            Err(e) => {
+                eprintln!("Verification failed: {e}");
+            }
+        },
         Err(e) => {
-            eprintln!("Error while writing to stream: {e}");
-            return Err("Error connecting to node");
-        }
-    }
-
-    stream.set_read_timeout(Some(Duration::new(5, 0))).unwrap();
-    match stream.read(&mut buf) {
-        Ok(_s) => Ok(buf),
-        Err(e) => {
-            eprintln!("Error while reading data from stream: {e}");
-            Err("Error reading data")
+            eprintln!("Error while deserializing {e}");
         }
     }
 }
 
-pub fn listen(blockchain: Arc<Mutex<Vec<Block>>>) {
+fn handle_accepted(msg: &Msg, block_pending: &mut (Block, u8)) {
+    match deserialize::<Block>(&msg.data) {
+        Ok(s) => {
+            if s == block_pending.0 {
+                block_pending.1 += 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("Couldn't deserialize block: {e}");
+        }
+    }
+}
+
+fn mint_block(
+    msg: &Msg,
+    blockchain: &Vec<Block>,
+    block_pending: &mut (Block, u8),
+    nodes: &Vec<&str>,
+) {
+    match deserialize::<Car>(&msg.data) {
+        Ok(s) => {
+            let mut new_block = Block {
+                hash: [0; HASH_LEN],
+                id: 0,
+                nonce: 0,
+                prev_hash: [0; HASH_LEN],
+                registered_car: s,
+            };
+
+            match blockchain.last() {
+                Some(last_block) => new_block.prev_hash = last_block.hash,
+                None => new_block.prev_hash = [0; HASH_LEN],
+            };
+
+            new_block.id = blockchain.len() as u32;
+
+            let calculated = mine_block(&mut new_block).expect("Error during minting!");
+            new_block.nonce = calculated.0;
+            new_block.hash = calculated.1;
+            *block_pending = (new_block.clone(), 1);
+            send_all(
+                Msg {
+                    command: Comm::NewBlock,
+                    data: serialize(&new_block).unwrap(),
+                },
+                nodes,
+            )
+            //    return publish_block(new_block, nodes);
+        }
+        Err(e) => {
+            eprintln!("Couldn't deserialize car: {e}");
+        }
+    }
+}
+
+fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static str> {
+    let mut bytes: Vec<u8> = Vec::new();
+
+    bytes.extend(&new_block.id.to_be_bytes());
+    bytes.extend(&new_block.prev_hash);
+    bytes.extend(&serialize(&new_block.registered_car).unwrap());
+
+    let mut nonce: u32 = 0;
+
+    while 1 == 1 {
+        let mut sha2_hash = Sha256::new();
+        sha2_hash.update(&bytes);
+        sha2_hash.update(nonce.to_be_bytes());
+        let sum = sha2_hash.finalize();
+        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
+            let result = match sum.try_into() {
+                Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
+                Ok(result) => result,
+            };
+            return Ok((nonce, result));
+        };
+        nonce += 1;
+    }
+    Err("Nonce couldn't be found")
+}
+
+pub fn handle_msg(
+    msg: Msg,
+    blockchain: &Vec<Block>,
+    nodes: &Vec<&str>,
+    block_pending: &mut (Block, u8),
+) {
+    match msg.command {
+        Comm::NewBlock => {
+            handle_new_block(&msg, blockchain, nodes, block_pending);
+        }
+        Comm::Accepted => {
+            handle_accepted(&msg, block_pending);
+        }
+        Comm::DataToBlock => {
+            mint_block(&msg, blockchain, block_pending, nodes);
+        }
+        _ => {}
+    }
+}
+
+pub fn listen(tx: Sender<Msg>) {
     let listener = TcpListener::bind("0.0.0.0:9000").unwrap();
 
     for stream in listener.incoming() {
@@ -178,9 +273,9 @@ pub fn listen(blockchain: Arc<Mutex<Vec<Block>>>) {
         println!("Remote connection from {:#?}", peer_addr);
 
         let thr = thread::spawn({
-            let blockchain_clone = blockchain.clone();
+            let tx1 = tx.clone();
             move || {
-                handle_incoming(stream, blockchain_clone);
+                handle_incoming(stream, tx1);
             }
         });
         match thr.join() {
@@ -191,11 +286,10 @@ pub fn listen(blockchain: Arc<Mutex<Vec<Block>>>) {
                 eprintln!("Error while joining thread: {:#?}", e);
             }
         };
-        println!("Remote connection with {:#?} closed", peer_addr);
     }
 }
 
-fn handle_incoming(mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>) {
+fn handle_incoming(mut stream: TcpStream, tx: Sender<Msg>) {
     let mut buff = [0; 1280];
     match stream.read(&mut buff) {
         Ok(_d) => {}
@@ -207,17 +301,7 @@ fn handle_incoming(mut stream: TcpStream, blockchain: Arc<Mutex<Vec<Block>>>) {
     match deserialize::<Msg>(&buff) {
         Ok(s) => {
             println!("Received message: {:?}", s);
-            match s.command {
-                Comm::NewBlock => {
-                    verify_block(&s.data, stream, blockchain);
-                }
-                Comm::Rejected => {
-                    println!("Woow, rejected 2");
-                }
-                _ => {
-                    println!("Lmao");
-                }
-            };
+            tx.send(s).expect("Error while sending message via channel");
         }
         Err(e) => {
             eprintln!("Error while deserializing message: {e}");
