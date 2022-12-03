@@ -1,7 +1,7 @@
 mod handlers;
-
 use bincode::deserialize;
 use bincode::serialize;
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
@@ -100,7 +100,7 @@ fn verify_block(block: Block) -> Result<Block, &'static str> {
 }
 
 fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    println!("Verifying block: {:?}", block);
+    debug!("Verifying block: {:?}", block);
 
     let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
         [0; HASH_LEN]
@@ -116,10 +116,9 @@ fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Blo
 }
 
 fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    println!("Verifying block: {:?}", block);
+    debug!("Verifying block: {:?}", block);
 
     if (block.id as usize) != blockchain.len() {
-        eprintln!("Block ID don't match blockchain lenght.");
         return Err("Block ID don't match blockchain lenght.");
     }
 
@@ -143,7 +142,7 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
                 stream = s;
             }
             Err(e) => {
-                eprintln!("Error connecting to node {node}, {e}");
+                error!("Error connecting to node {node}, {e}");
                 continue;
             }
         };
@@ -151,7 +150,7 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
         match stream.set_write_timeout(Some(Duration::new(2, 0))) {
             Ok(_) => {}
             Err(e) => {
-                eprintln!("Error setting timeout: {e}");
+                error!("Error setting timeout: {e}");
                 continue;
             }
         }
@@ -159,7 +158,7 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
         match stream.write(&serialize(&msg).unwrap()) {
             Ok(_s) => {}
             Err(e) => {
-                eprintln!("Error while writing to stream: {e}");
+                error!("Error while writing to stream: {e}");
                 continue;
             }
         }
@@ -204,7 +203,7 @@ fn mint_block(
             )
         }
         Err(e) => {
-            eprintln!("Couldn't deserialize car: {e}");
+            warn!("Couldn't deserialize car: {e}");
         }
     }
 }
@@ -236,7 +235,6 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     Err("Nonce couldn't be found")
 }
 
-
 pub fn broadcast_chain(blockchain: &Vec<Block>, nodes: &Vec<&str>) {
     send_all(
         Msg {
@@ -265,15 +263,15 @@ pub fn handle_msg(
             mint_block(&msg, blockchain, block_pending, nodes, node_name);
         }
         Comm::PrintChain => {
-            println!("Current blockchain status: {:?}", blockchain);
+            info!("Current blockchain status: {:?}", blockchain);
         }
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
-                println!("Accepting new blockchain");
+                info!("Accepting new blockchain");
                 *blockchain = s;
             }
             Err(e) => {
-                eprintln!("New blockchain verification failed: {e}");
+                error!("New blockchain verification failed: {e}");
             }
         },
 
@@ -287,7 +285,7 @@ pub fn listen(tx: Sender<Msg>) {
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         let peer_addr = stream.peer_addr().unwrap();
-        println!("Remote connection from {:#?}", peer_addr);
+        info!("Remote connection from {:#?}", peer_addr);
 
         let thr = thread::spawn({
             let tx1 = tx.clone();
@@ -297,10 +295,10 @@ pub fn listen(tx: Sender<Msg>) {
         });
         match thr.join() {
             Ok(_s) => {
-                println!("Remote connection with {:#?} closed", peer_addr);
+                info!("Remote connection with {:#?} closed", peer_addr);
             }
             Err(e) => {
-                eprintln!("Error while joining thread: {:#?}", e);
+                error!("Error while joining thread: {:#?}", e);
             }
         };
     }
@@ -311,17 +309,17 @@ fn handle_incoming(mut stream: TcpStream, tx: Sender<Msg>) {
     match stream.read(&mut buff) {
         Ok(_d) => {}
         Err(e) => {
-            eprintln!("Error while handling stream: {e}");
+            error!("Error while handling stream: {e}");
         }
     }
 
     match deserialize::<Msg>(&buff) {
         Ok(s) => {
-            println!("Received message: {:?}", s);
+            debug!("Received message: {:?}", s);
             tx.send(s).expect("Error while sending message via channel");
         }
         Err(e) => {
-            eprintln!("Error while deserializing message: {e}");
+            error!("Error while deserializing message: {e}");
         }
     };
 }

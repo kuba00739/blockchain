@@ -6,7 +6,12 @@ use lib::Msg;
 use std::env;
 
 fn main() {
-    let nodes = env::var("NODES").expect("Couldn't access NODES env variable.");
+    let nodes = match env::var("NODES") {
+        Ok(s) => s,
+        Err(_) => {
+            panic!("MISSING NODES ENVVAR");
+        }
+    };
     let nodes_vec: Vec<&str> = nodes.split(",").collect();
 
     let new_car = Car::new(
