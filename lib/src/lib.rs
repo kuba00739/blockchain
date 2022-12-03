@@ -78,12 +78,27 @@ impl Vin {
     }
 }
 
-fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
-    println!("Verifying block: {:?}", block);
-
+fn verify_block(block: Block) -> Result<Block, &'static str> {
     let mut bytes: Vec<u8> = Vec::new();
-
     bytes.extend(&block.id.to_be_bytes());
+
+    bytes.extend(&block.prev_hash);
+    bytes.extend(&serialize(&block.registered_car).unwrap());
+    bytes.extend(&serialize(&block.mined_by).unwrap());
+
+    let mut sha2_hash = Sha256::new();
+    sha2_hash.update(&bytes);
+    sha2_hash.update(block.nonce.to_be_bytes());
+    let sum = sha2_hash.finalize();
+
+    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
+        return Ok(block);
+    }
+    Err("Hash in improper form for this nonce.")
+}
+
+fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
+    println!("Verifying block: {:?}", block);
 
     let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
         [0; HASH_LEN]
@@ -95,19 +110,27 @@ fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static
         return Err("Previous hash don't match!");
     }
 
-    bytes.extend(&block.prev_hash);
-    bytes.extend(&serialize(&block.registered_car).unwrap());
-    bytes.extend(&serialize(&block.mined_by).unwrap());
+    verify_block(block)
+}
 
-    let mut sha2_hash = Sha256::new();
-    sha2_hash.update(&bytes);
-    sha2_hash.update(block.nonce.to_be_bytes());
-    let sum = sha2_hash.finalize();
+fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
+    println!("Verifying block: {:?}", block);
 
-    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 128) {
-        return Ok(block);
+    if (block.id as usize) != blockchain.len() {
+        eprintln!("Block ID don't match blockchain lenght.");
+        return Err("Block ID don't match blockchain lenght.");
     }
-    Err("Hash in improper form for this nonce.")
+
+    let control_prev_hash: [u8; 32] = match blockchain.last() {
+        Some(s) => s.hash,
+        None => [0; HASH_LEN],
+    };
+
+    if control_prev_hash != block.prev_hash {
+        return Err("Previous hash don't match!");
+    }
+
+    verify_block(block)
 }
 
 pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
@@ -148,27 +171,22 @@ fn handle_new_block(
     block_pending: &mut (Block, u8),
 ) {
     match deserialize::<Block>(&msg.data) {
-        Ok(s) => {
-            if (blockchain.len() > 0) && (s.id == 0) {
-                eprintln!("ID of new block is 0, but current blockchain lenght is grater than 0.");
-                return;
+        Ok(s) => match verify_new_block(s, blockchain) {
+            Ok(s) => {
+                send_all(
+                    Msg {
+                        command: Comm::Accepted,
+                        data: serialize(&s).unwrap(),
+                    },
+                    nodes,
+                );
+
+                *block_pending = (s, 1);
             }
-            match verify_block(s, blockchain) {
-                Ok(s) => {
-                    send_all(
-                        Msg {
-                            command: Comm::Accepted,
-                            data: serialize(&s).unwrap(),
-                        },
-                        nodes,
-                    );
-                    *block_pending = (s, 1);
-                }
-                Err(e) => {
-                    eprintln!("Verification failed: {e}");
-                }
+            Err(e) => {
+                eprintln!("Verification failed: {e}");
             }
-        }
+        },
         Err(e) => {
             eprintln!("Error while deserializing {e}");
         }
@@ -246,7 +264,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
         sha2_hash.update(&bytes);
         sha2_hash.update(nonce.to_be_bytes());
         let sum = sha2_hash.finalize();
-        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 128) {
+        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
             let result = match sum.try_into() {
                 Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
                 Ok(result) => result,
@@ -274,7 +292,7 @@ fn handle_incoming_blockchain(
                     eprintln!("Block id incorrect");
                     return Err("Block id incorrect");
                 }
-                match verify_block(block.clone(), s.as_ref()) {
+                match verify_broadcasted_block(block.clone(), s.as_ref()) {
                     Ok(_) => {}
                     Err(_) => {
                         eprintln!("Blockchain verification failed.");

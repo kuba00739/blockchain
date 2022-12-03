@@ -13,6 +13,8 @@ use std::time::Duration;
 
 const HASH_LEN: usize = 32;
 
+//TODO- new thread for block mining: Can use handle_new_block
+
 fn main() {
     let (tx_listener, rx_main) = mpsc::channel::<Msg>();
 
