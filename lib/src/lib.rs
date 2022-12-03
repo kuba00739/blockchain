@@ -39,6 +39,7 @@ pub enum Comm {
     Accepted,
     Rejected,
     DataToBlock,
+    PrintChain,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -98,7 +99,7 @@ fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static
     sha2_hash.update(block.nonce.to_be_bytes());
     let sum = sha2_hash.finalize();
 
-    if (sum[0] == 0) && (sum[1] == 0) {
+    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) && (sum[3] <= 127) {
         return Ok(block);
     }
     Err("Hash in improper form for this nonce.")
@@ -210,7 +211,6 @@ fn mint_block(
                 },
                 nodes,
             )
-            //    return publish_block(new_block, nodes);
         }
         Err(e) => {
             eprintln!("Couldn't deserialize car: {e}");
@@ -232,7 +232,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
         sha2_hash.update(&bytes);
         sha2_hash.update(nonce.to_be_bytes());
         let sum = sha2_hash.finalize();
-        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
+        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) && (sum[3] <= 127) {
             let result = match sum.try_into() {
                 Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
                 Ok(result) => result,
@@ -259,6 +259,9 @@ pub fn handle_msg(
         }
         Comm::DataToBlock => {
             mint_block(&msg, blockchain, block_pending, nodes);
+        }
+        Comm::PrintChain => {
+            println!("Current blockchain status: {:?}", blockchain);
         }
         _ => {}
     }

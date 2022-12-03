@@ -39,6 +39,7 @@ fn main() {
         println!("Received msg: {:?}", msg);
         handle_msg(msg, &blocks, &nodes_vec, &mut block_pending);
         if (block_pending.1 as f64) / (nodes_vec.len() as f64) > 0.5 {
+            println!("Accepting block: {:?}", block_pending.0);
             blocks.push(block_pending.0.clone());
             block_pending = (
                 Block {

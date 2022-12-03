@@ -16,11 +16,23 @@ fn main() {
         None,
     );
 
-    send_all(
-        Msg {
-            command: Comm::DataToBlock,
-            data: serialize(&new_car).unwrap(),
-        },
-        &nodes_vec,
-    );
+    let argv: Vec<String> = env::args().collect();
+
+    if &argv[1] == "DUMP" {
+        send_all(
+            Msg {
+                command: Comm::PrintChain,
+                data: Vec::new(),
+            },
+            &nodes_vec,
+        )
+    } else {
+        send_all(
+            Msg {
+                command: Comm::DataToBlock,
+                data: serialize(&new_car).unwrap(),
+            },
+            &nodes_vec,
+        );
+    }
 }
