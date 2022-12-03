@@ -1,3 +1,5 @@
+mod handlers;
+
 use bincode::deserialize;
 use bincode::serialize;
 use serde::{Deserialize, Serialize};
@@ -164,48 +166,6 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
     }
 }
 
-fn handle_new_block(
-    msg: &Msg,
-    blockchain: &Vec<Block>,
-    nodes: &Vec<&str>,
-    block_pending: &mut (Block, u8),
-) {
-    match deserialize::<Block>(&msg.data) {
-        Ok(s) => match verify_new_block(s, blockchain) {
-            Ok(s) => {
-                send_all(
-                    Msg {
-                        command: Comm::Accepted,
-                        data: serialize(&s).unwrap(),
-                    },
-                    nodes,
-                );
-
-                *block_pending = (s, 1);
-            }
-            Err(e) => {
-                eprintln!("Verification failed: {e}");
-            }
-        },
-        Err(e) => {
-            eprintln!("Error while deserializing {e}");
-        }
-    }
-}
-
-fn handle_accepted(msg: &Msg, block_pending: &mut (Block, u8)) {
-    match deserialize::<Block>(&msg.data) {
-        Ok(s) => {
-            if s == block_pending.0 {
-                block_pending.1 += 1;
-            }
-        }
-        Err(e) => {
-            eprintln!("Couldn't deserialize block: {e}");
-        }
-    }
-}
-
 fn mint_block(
     msg: &Msg,
     blockchain: &Vec<Block>,
@@ -276,39 +236,6 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     Err("Nonce couldn't be found")
 }
 
-fn handle_incoming_blockchain(
-    msg: &Msg,
-    current_blockchain: &Vec<Block>,
-) -> Result<Vec<Block>, &'static str> {
-    match deserialize::<Vec<Block>>(&msg.data) {
-        Ok(s) => {
-            if current_blockchain.len() >= s.len() {
-                eprintln!("New block is shorter or equal in lenght to current one.");
-                return Err("New block is shorter or equal in lenght to current one.");
-            }
-            let mut ctr: u32 = 0;
-            for block in &s {
-                if block.id != ctr {
-                    eprintln!("Block id incorrect");
-                    return Err("Block id incorrect");
-                }
-                match verify_broadcasted_block(block.clone(), s.as_ref()) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        eprintln!("Blockchain verification failed.");
-                        return Err("Blockchain verification failed.");
-                    }
-                }
-                ctr += 1;
-            }
-            return Ok(s.clone());
-        }
-        Err(_) => {
-            eprintln!("Error while deserializing blockchain.");
-            return Err("Error while deserializing blockchain.");
-        }
-    }
-}
 
 pub fn broadcast_chain(blockchain: &Vec<Block>, nodes: &Vec<&str>) {
     send_all(
@@ -329,10 +256,10 @@ pub fn handle_msg(
 ) {
     match msg.command {
         Comm::NewBlock => {
-            handle_new_block(&msg, blockchain, nodes, block_pending);
+            handlers::handle_new_block(&msg, blockchain, nodes, block_pending);
         }
         Comm::Accepted => {
-            handle_accepted(&msg, block_pending);
+            handlers::handle_accepted(&msg, block_pending);
         }
         Comm::DataToBlock => {
             mint_block(&msg, blockchain, block_pending, nodes, node_name);
@@ -340,7 +267,7 @@ pub fn handle_msg(
         Comm::PrintChain => {
             println!("Current blockchain status: {:?}", blockchain);
         }
-        Comm::Blockchain => match handle_incoming_blockchain(&msg, &blockchain) {
+        Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
                 println!("Accepting new blockchain");
                 *blockchain = s;
