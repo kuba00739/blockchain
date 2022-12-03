@@ -6,7 +6,6 @@ use crate::Comm;
 use crate::verify_broadcasted_block;
 use bincode::deserialize;
 use bincode::serialize;
-use serde::{Deserialize, Serialize};
 
 pub fn handle_new_block(
     msg: &Msg,
