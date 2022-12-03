@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+      - NAME=node-1
 
     container_name: "node-1"
     networks:
@@ -18,6 +19,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.4:9000,10.6.7.2:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+      - NAME=node-2
 
     container_name: "node-2"
     networks:
@@ -29,6 +31,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+      - NAME=node-3
 
     container_name: "node-3"
     networks:
@@ -40,6 +43,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000,10.6.7.9:9000
+      - NAME=node-4
 
     container_name: "node-4"
     networks:
@@ -51,6 +55,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.9:9000,10.6.7.7:9000,10.6.7.8:9000
+      - NAME=node-5
 
     container_name: "node-5"
     networks:
@@ -62,6 +67,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.9:9000,10.6.7.8:9000
+      - NAME=node-6
 
     container_name: "node-6"
     networks:
@@ -73,6 +79,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.9:9000
+      - NAME=node-7
 
     container_name: "node-7"
     networks:
@@ -84,6 +91,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - NODES=10.6.7.3:9000,10.6.7.2:9000,10.6.7.4:9000,10.6.7.5:9000,10.6.7.6:9000,10.6.7.7:9000,10.6.7.8:9000
+      - NAME=node-8
     container_name: "node-8"
     networks:
       node-net:

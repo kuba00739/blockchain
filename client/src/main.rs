@@ -26,6 +26,14 @@ fn main() {
             },
             &nodes_vec,
         )
+    } else if &argv[1] == "RETURN_BLOCKCHAIN" {
+        send_all(
+            Msg {
+                command: Comm::Blockchain,
+                data: Vec::new(),
+            },
+            &nodes_vec,
+        );
     } else {
         send_all(
             Msg {

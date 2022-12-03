@@ -31,6 +31,7 @@ pub struct Block {
     pub prev_hash: [u8; HASH_LEN],
     pub nonce: u32,
     pub registered_car: Car,
+    pub mined_by: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -40,6 +41,8 @@ pub enum Comm {
     Rejected,
     DataToBlock,
     PrintChain,
+    Broadcast,
+    Blockchain,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -82,9 +85,10 @@ fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static
 
     bytes.extend(&block.id.to_be_bytes());
 
-    let control_prev_hash = match blockchain.last() {
-        Some(last_block) => last_block.hash,
-        None => [0; HASH_LEN],
+    let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
+        [0; HASH_LEN]
+    } else {
+        blockchain[((block.id - 1) as usize)].hash
     };
 
     if control_prev_hash != block.prev_hash {
@@ -93,13 +97,14 @@ fn verify_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static
 
     bytes.extend(&block.prev_hash);
     bytes.extend(&serialize(&block.registered_car).unwrap());
+    bytes.extend(&serialize(&block.mined_by).unwrap());
 
     let mut sha2_hash = Sha256::new();
     sha2_hash.update(&bytes);
     sha2_hash.update(block.nonce.to_be_bytes());
     let sum = sha2_hash.finalize();
 
-    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) && (sum[3] <= 127) {
+    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 128) {
         return Ok(block);
     }
     Err("Hash in improper form for this nonce.")
@@ -118,7 +123,7 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
             }
         };
 
-        match stream.set_write_timeout(Some(Duration::new(5, 0))) {
+        match stream.set_write_timeout(Some(Duration::new(2, 0))) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!("Error setting timeout: {e}");
@@ -143,21 +148,27 @@ fn handle_new_block(
     block_pending: &mut (Block, u8),
 ) {
     match deserialize::<Block>(&msg.data) {
-        Ok(s) => match verify_block(s, blockchain) {
-            Ok(s) => {
-                send_all(
-                    Msg {
-                        command: Comm::Accepted,
-                        data: serialize(&s).unwrap(),
-                    },
-                    nodes,
-                );
-                *block_pending = (s, 0);
+        Ok(s) => {
+            if (blockchain.len() > 0) && (s.id == 0) {
+                eprintln!("ID of new block is 0, but current blockchain lenght is grater than 0.");
+                return;
             }
-            Err(e) => {
-                eprintln!("Verification failed: {e}");
+            match verify_block(s, blockchain) {
+                Ok(s) => {
+                    send_all(
+                        Msg {
+                            command: Comm::Accepted,
+                            data: serialize(&s).unwrap(),
+                        },
+                        nodes,
+                    );
+                    *block_pending = (s, 1);
+                }
+                Err(e) => {
+                    eprintln!("Verification failed: {e}");
+                }
             }
-        },
+        }
         Err(e) => {
             eprintln!("Error while deserializing {e}");
         }
@@ -182,6 +193,7 @@ fn mint_block(
     blockchain: &Vec<Block>,
     block_pending: &mut (Block, u8),
     nodes: &Vec<&str>,
+    node_name: &String,
 ) {
     match deserialize::<Car>(&msg.data) {
         Ok(s) => {
@@ -191,6 +203,7 @@ fn mint_block(
                 nonce: 0,
                 prev_hash: [0; HASH_LEN],
                 registered_car: s,
+                mined_by: node_name.to_string(),
             };
 
             match blockchain.last() {
@@ -224,6 +237,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     bytes.extend(&new_block.id.to_be_bytes());
     bytes.extend(&new_block.prev_hash);
     bytes.extend(&serialize(&new_block.registered_car).unwrap());
+    bytes.extend(&serialize(&new_block.mined_by).unwrap());
 
     let mut nonce: u32 = 0;
 
@@ -232,7 +246,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
         sha2_hash.update(&bytes);
         sha2_hash.update(nonce.to_be_bytes());
         let sum = sha2_hash.finalize();
-        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) && (sum[3] <= 127) {
+        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 128) {
             let result = match sum.try_into() {
                 Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
                 Ok(result) => result,
@@ -244,11 +258,56 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     Err("Nonce couldn't be found")
 }
 
+fn handle_incoming_blockchain(
+    msg: &Msg,
+    current_blockchain: &Vec<Block>,
+) -> Result<Vec<Block>, &'static str> {
+    match deserialize::<Vec<Block>>(&msg.data) {
+        Ok(s) => {
+            if current_blockchain.len() >= s.len() {
+                eprintln!("New block is shorter or equal in lenght to current one.");
+                return Err("New block is shorter or equal in lenght to current one.");
+            }
+            let mut ctr: u32 = 0;
+            for block in &s {
+                if block.id != ctr {
+                    eprintln!("Block id incorrect");
+                    return Err("Block id incorrect");
+                }
+                match verify_block(block.clone(), s.as_ref()) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        eprintln!("Blockchain verification failed.");
+                        return Err("Blockchain verification failed.");
+                    }
+                }
+                ctr += 1;
+            }
+            return Ok(s.clone());
+        }
+        Err(_) => {
+            eprintln!("Error while deserializing blockchain.");
+            return Err("Error while deserializing blockchain.");
+        }
+    }
+}
+
+pub fn broadcast_chain(blockchain: &Vec<Block>, nodes: &Vec<&str>) {
+    send_all(
+        Msg {
+            command: Comm::Blockchain,
+            data: serialize(blockchain).unwrap(),
+        },
+        nodes,
+    );
+}
+
 pub fn handle_msg(
     msg: Msg,
-    blockchain: &Vec<Block>,
+    blockchain: &mut Vec<Block>,
     nodes: &Vec<&str>,
     block_pending: &mut (Block, u8),
+    node_name: &String,
 ) {
     match msg.command {
         Comm::NewBlock => {
@@ -258,11 +317,21 @@ pub fn handle_msg(
             handle_accepted(&msg, block_pending);
         }
         Comm::DataToBlock => {
-            mint_block(&msg, blockchain, block_pending, nodes);
+            mint_block(&msg, blockchain, block_pending, nodes, node_name);
         }
         Comm::PrintChain => {
             println!("Current blockchain status: {:?}", blockchain);
         }
+        Comm::Blockchain => match handle_incoming_blockchain(&msg, &blockchain) {
+            Ok(s) => {
+                println!("Accepting new blockchain");
+                *blockchain = s;
+            }
+            Err(e) => {
+                eprintln!("New blockchain verification failed: {e}");
+            }
+        },
+
         _ => {}
     }
 }
