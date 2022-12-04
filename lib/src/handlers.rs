@@ -13,7 +13,7 @@ pub fn handle_new_block(
     msg: &Msg,
     blockchain: &Vec<Block>,
     nodes: &Vec<&str>,
-    block_pending: &mut (Block, u8),
+    block_pending: &mut Vec<(Block, u8)>,
 ) {
     match deserialize::<Block>(&msg.data) {
         Ok(s) => {
@@ -31,7 +31,7 @@ pub fn handle_new_block(
                         nodes,
                     );
 
-                    *block_pending = (s, 1);
+                    block_pending.push((s, 1));
                 }
                 Err(e) => {
                     debug!("Verification failed: {e}");
@@ -44,11 +44,13 @@ pub fn handle_new_block(
     }
 }
 
-pub fn handle_accepted(msg: &Msg, block_pending: &mut (Block, u8)) {
+pub fn handle_accepted(msg: &Msg, blocks_pending: &mut Vec<(Block, u8)>) {
     match deserialize::<Block>(&msg.data) {
         Ok(s) => {
-            if s == block_pending.0 {
-                block_pending.1 += 1;
+            for pending in blocks_pending {
+                if s == pending.0 {
+                    pending.1 += 1;
+                }
             }
         }
         Err(e) => {

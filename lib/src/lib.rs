@@ -84,7 +84,7 @@ impl Vin {
 fn format_hash(hash: [u8; HASH_LEN]) -> String {
     let mut formatted = String::new();
     for i in &hash[0..8] {
-        formatted += &format!("{:x}", i).to_string();
+        formatted += &format!("{:2x}", i).to_string();
     }
     formatted += &"...".to_string();
     formatted
@@ -207,7 +207,7 @@ pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
 fn mint_block(
     msg: &Msg,
     blockchain: &Vec<Block>,
-    block_pending: &mut (Block, u8),
+    blocks_pending: &mut Vec<(Block, u8)>,
     nodes: &Vec<&str>,
     node_name: &String,
 ) {
@@ -232,7 +232,7 @@ fn mint_block(
             let calculated = mine_block(&mut new_block).expect("Error during minting!");
             new_block.nonce = calculated.0;
             new_block.hash = calculated.1;
-            *block_pending = (new_block.clone(), 1);
+            blocks_pending.push((new_block.clone(), 1));
             send_all(
                 Msg {
                     command: Comm::NewBlock,
@@ -288,18 +288,18 @@ pub fn handle_msg(
     msg: Msg,
     blockchain: &mut Vec<Block>,
     nodes: &Vec<&str>,
-    block_pending: &mut (Block, u8),
+    blocks_pending: &mut Vec<(Block, u8)>,
     node_name: &String,
 ) {
     match msg.command {
         Comm::NewBlock => {
-            handlers::handle_new_block(&msg, blockchain, nodes, block_pending);
+            handlers::handle_new_block(&msg, blockchain, nodes, blocks_pending);
         }
         Comm::Accepted => {
-            handlers::handle_accepted(&msg, block_pending);
+            handlers::handle_accepted(&msg, blocks_pending);
         }
         Comm::DataToBlock => {
-            mint_block(&msg, blockchain, block_pending, nodes, node_name);
+            mint_block(&msg, blockchain, blocks_pending, nodes, node_name);
         }
         Comm::PrintChain => {
             info!("Current blockchain status: \n{:?}", blockchain);

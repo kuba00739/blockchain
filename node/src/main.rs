@@ -1,7 +1,7 @@
 use chrono::Local;
 use env_logger::Builder;
 use lib::{broadcast_chain, handle_msg, listen};
-use lib::{Block, Car, Comm, Msg};
+use lib::{Block, Comm, Msg};
 use log::LevelFilter;
 use log::{debug, info};
 use std::env;
@@ -10,8 +10,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
-
-const HASH_LEN: usize = 32;
 
 //TODO- new thread for block mining: Can use handle_new_block
 
@@ -37,17 +35,7 @@ fn main() {
     let nodes_vec: Vec<&str> = nodes.split(",").collect();
 
     let mut blocks: Vec<Block> = Vec::new();
-    let mut block_pending: (Block, u8) = (
-        Block {
-            hash: [0; HASH_LEN],
-            id: 0,
-            prev_hash: [0; HASH_LEN],
-            nonce: 0,
-            registered_car: Car::new(None, None, None, None),
-            mined_by: "".to_string(),
-        },
-        0,
-    );
+    let mut blocks_pending: Vec<(Block, u8)> = Vec::new();
 
     let tx1 = tx_listener.clone();
 
@@ -78,14 +66,23 @@ fn main() {
             }
             _ => {}
         }
-        handle_msg(msg, &mut blocks, &nodes_vec, &mut block_pending, &node_name);
-        if (block_pending.0.id as usize) != blocks.len() {
-            block_pending.1 = 0;
-        }
-        if (block_pending.1 as f64) / (nodes_vec.len() as f64) >= 0.5 {
-            info!("Accepting block: {:#?}", block_pending.0);
-            blocks.push(block_pending.0.clone());
-            block_pending.1 = 0;
+        handle_msg(msg, &mut blocks, &nodes_vec, &mut blocks_pending, &node_name);
+
+        let mut index: usize = 0;
+
+        while index < blocks_pending.len() {
+            if (blocks_pending[index].0.id as usize) != blocks.len() {
+                blocks_pending.remove(index);
+                continue;
+            }
+            if (blocks_pending[index].1 as f64) / (nodes_vec.len() as f64) >= 0.5 {
+                info!("Accepting block: {:#?}", blocks_pending[index].0);
+                blocks.push(blocks_pending[index].0.clone());
+                blocks_pending.remove(index);
+                continue;
+            }
+
+            index += 1;
         }
     }
 }
