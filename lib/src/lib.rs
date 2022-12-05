@@ -74,9 +74,9 @@ impl Car {
 impl Vin {
     pub fn new(wmi: Option<String>, vds: Option<String>, vis: Option<String>) -> Vin {
         Vin {
-            wmi: wmi.unwrap_or_else(|| "".to_string()),
-            vds: vds.unwrap_or_else(|| "".to_string()),
-            vis: vis.unwrap_or_else(|| "".to_string()),
+            wmi: wmi.unwrap_or("".to_string()),
+            vds: vds.unwrap_or("".to_string()),
+            vis: vis.unwrap_or("".to_string()),
         }
     }
 }
