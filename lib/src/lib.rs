@@ -132,7 +132,7 @@ fn verify_block(block: Block) -> Result<Block, &'static str> {
     sha2_hash.update(block.nonce.to_be_bytes());
     let sum = sha2_hash.finalize();
 
-    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
+    if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 4) {
         return Ok(block);
     }
     Err("Hash in improper form for this nonce.")
@@ -262,7 +262,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
         sha2_hash.update(&bytes);
         sha2_hash.update(nonce.to_be_bytes());
         let sum = sha2_hash.finalize();
-        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) {
+        if (sum[0] == 0) && (sum[1] == 0) && (sum[2] <= 4) {
             let result = match sum.try_into() {
                 Err(cause) => panic!("Can't convert a result hash to a slice: {cause}"),
                 Ok(result) => result,
@@ -344,8 +344,8 @@ pub fn listen(tx: Sender<Msg>) {
 }
 
 fn handle_incoming(mut stream: TcpStream, tx: Sender<Msg>) {
-    let mut buff = [0; 1280];
-    match stream.read(&mut buff) {
+    let mut buff = Vec::new();
+    match stream.read_to_end(&mut buff) {
         Ok(_d) => {}
         Err(e) => {
             error!("Error while handling stream: {e}");

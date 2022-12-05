@@ -66,7 +66,13 @@ fn main() {
             }
             _ => {}
         }
-        handle_msg(msg, &mut blocks, &nodes_vec, &mut blocks_pending, &node_name);
+        handle_msg(
+            msg,
+            &mut blocks,
+            &nodes_vec,
+            &mut blocks_pending,
+            &node_name,
+        );
 
         let mut index: usize = 0;
 
@@ -75,7 +81,7 @@ fn main() {
                 blocks_pending.remove(index);
                 continue;
             }
-            if (blocks_pending[index].1 as f64) / (nodes_vec.len() as f64) >= 0.5 {
+            if (blocks_pending[index].1 as f64) / (nodes_vec.len() as f64) > 0.2 {
                 info!("Accepting block: {:#?}", blocks_pending[index].0);
                 blocks.push(blocks_pending[index].0.clone());
                 blocks_pending.remove(index);
