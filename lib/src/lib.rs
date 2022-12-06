@@ -248,12 +248,18 @@ pub fn handle_msg(
     node_name: &String,
 ) {
     match msg.command {
-        Comm::NewBlock => {
-            handlers::handle_new_block(&msg, blockchain, blocks_pending);
-        }
-        Comm::Accepted => {
-            handlers::handle_accepted(&msg, blocks_pending);
-        }
+        Comm::NewBlock => match handlers::handle_new_block(&msg, blockchain, blocks_pending) {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("Error during new block handling: {e}");
+            }
+        },
+        Comm::Accepted => match handlers::handle_accepted(&msg, blocks_pending) {
+            Ok(_) => {}
+            Err(e) => {
+                warn!("Error while handling accepted: {e}");
+            }
+        },
         Comm::DataToBlock => {
             mint_block(&msg, blockchain, blocks_pending, node_name);
         }

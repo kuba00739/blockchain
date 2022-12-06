@@ -9,51 +9,42 @@ use crate::Msg;
 use bincode::deserialize;
 use bincode::serialize;
 
-pub fn handle_new_block(msg: &Msg, blockchain: &Vec<Block>, block_pending: &mut Vec<(Block, u8)>) {
-    match deserialize::<Block>(&msg.data) {
-        Ok(s) => {
-            if (s.id as usize) != blockchain.len() {
-                debug!("Block ID didn't match!");
-                return;
-            }
-            match verify_new_block(s, blockchain) {
-                Ok(s) => {
-                    match send_all(Msg {
-                        command: Comm::Accepted,
-                        data: serialize(&s).unwrap(),
-                    }) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            warn!("Error while multicasting accepted message: {e}");
-                        }
-                    }
-
-                    block_pending.push((s, 1));
-                }
-                Err(e) => {
-                    debug!("Verification failed: {e}");
-                }
-            }
-        }
+pub fn handle_new_block(
+    msg: &Msg,
+    blockchain: &Vec<Block>,
+    block_pending: &mut Vec<(Block, u8)>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let block = deserialize::<Block>(&msg.data)?;
+    if (block.id as usize) != blockchain.len() {
+        debug!("Block ID didn't match!");
+        return Ok(());
+    };
+    verify_new_block(block.clone(), blockchain)?;
+    match send_all(Msg {
+        command: Comm::Accepted,
+        data: serialize(&block).unwrap(),
+    }) {
+        Ok(_) => {}
         Err(e) => {
-            warn!("Error while deserializing {e}");
+            warn!("Error while multicasting accepted message: {e}");
         }
     }
+
+    block_pending.push((block, 1));
+    Ok(())
 }
 
-pub fn handle_accepted(msg: &Msg, blocks_pending: &mut Vec<(Block, u8)>) {
-    match deserialize::<Block>(&msg.data) {
-        Ok(s) => {
-            for pending in blocks_pending {
-                if s == pending.0 {
-                    pending.1 += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!("Couldn't deserialize block: {e}");
+pub fn handle_accepted(
+    msg: &Msg,
+    blocks_pending: &mut Vec<(Block, u8)>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let block = deserialize::<Block>(&msg.data)?;
+    for pending in blocks_pending {
+        if block == pending.0 {
+            pending.1 += 1;
         }
     }
+    Ok(())
 }
 
 pub fn handle_incoming_blockchain(
