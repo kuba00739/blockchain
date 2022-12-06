@@ -1,15 +1,12 @@
 mod handlers;
+pub mod networking;
+use crate::networking::send_all;
 use bincode::deserialize;
 use bincode::serialize;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc::Sender;
-use std::thread;
-use std::time::Duration;
 
 const HASH_LEN: usize = 32;
 
@@ -173,42 +170,10 @@ fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'st
     verify_block(block)
 }
 
-pub fn send_all(msg: Msg, nodes: &Vec<&str>) {
-    for node in nodes {
-        let mut stream: TcpStream;
-        match TcpStream::connect(node) {
-            Ok(s) => {
-                stream = s;
-            }
-            Err(e) => {
-                error!("Error connecting to node {node}, {e}");
-                continue;
-            }
-        };
-
-        match stream.set_write_timeout(Some(Duration::new(2, 0))) {
-            Ok(_) => {}
-            Err(e) => {
-                error!("Error setting timeout: {e}");
-                continue;
-            }
-        }
-
-        match stream.write(&serialize(&msg).unwrap()) {
-            Ok(_s) => {}
-            Err(e) => {
-                error!("Error while writing to stream: {e}");
-                continue;
-            }
-        }
-    }
-}
-
 fn mint_block(
     msg: &Msg,
     blockchain: &Vec<Block>,
     blocks_pending: &mut Vec<(Block, u8)>,
-    nodes: &Vec<&str>,
     node_name: &String,
 ) {
     match deserialize::<Car>(&msg.data) {
@@ -233,13 +198,15 @@ fn mint_block(
             new_block.nonce = calculated.0;
             new_block.hash = calculated.1;
             blocks_pending.push((new_block.clone(), 1));
-            send_all(
-                Msg {
-                    command: Comm::NewBlock,
-                    data: serialize(&new_block).unwrap(),
-                },
-                nodes,
-            )
+            match send_all(Msg {
+                command: Comm::NewBlock,
+                data: serialize(&new_block).unwrap(),
+            }) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("Error while multicasting block: {e}");
+                }
+            }
         }
         Err(e) => {
             warn!("Couldn't deserialize car: {e}");
@@ -274,32 +241,21 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     Err("Nonce couldn't be found")
 }
 
-pub fn broadcast_chain(blockchain: &Vec<Block>, nodes: &Vec<&str>) {
-    send_all(
-        Msg {
-            command: Comm::Blockchain,
-            data: serialize(blockchain).unwrap(),
-        },
-        nodes,
-    );
-}
-
 pub fn handle_msg(
     msg: Msg,
     blockchain: &mut Vec<Block>,
-    nodes: &Vec<&str>,
     blocks_pending: &mut Vec<(Block, u8)>,
     node_name: &String,
 ) {
     match msg.command {
         Comm::NewBlock => {
-            handlers::handle_new_block(&msg, blockchain, nodes, blocks_pending);
+            handlers::handle_new_block(&msg, blockchain, blocks_pending);
         }
         Comm::Accepted => {
             handlers::handle_accepted(&msg, blocks_pending);
         }
         Comm::DataToBlock => {
-            mint_block(&msg, blockchain, blocks_pending, nodes, node_name);
+            mint_block(&msg, blockchain, blocks_pending, node_name);
         }
         Comm::PrintChain => {
             info!("Current blockchain status: \n{:?}", blockchain);
@@ -316,49 +272,4 @@ pub fn handle_msg(
 
         _ => {}
     }
-}
-
-pub fn listen(tx: Sender<Msg>) {
-    let listener = TcpListener::bind("0.0.0.0:9000").unwrap();
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        let peer_addr = stream.peer_addr().unwrap();
-        debug!("Remote connection from {:#?}", peer_addr);
-
-        let thr = thread::spawn({
-            let tx1 = tx.clone();
-            move || {
-                handle_incoming(stream, tx1);
-            }
-        });
-        match thr.join() {
-            Ok(_s) => {
-                debug!("Remote connection with {:#?} closed", peer_addr);
-            }
-            Err(e) => {
-                error!("Error while joining thread: {:#?}", e);
-            }
-        };
-    }
-}
-
-fn handle_incoming(mut stream: TcpStream, tx: Sender<Msg>) {
-    let mut buff = Vec::new();
-    match stream.read_to_end(&mut buff) {
-        Ok(_d) => {}
-        Err(e) => {
-            error!("Error while handling stream: {e}");
-        }
-    }
-
-    match deserialize::<Msg>(&buff) {
-        Ok(s) => {
-            debug!("Received message: {:#?}", s);
-            tx.send(s).expect("Error while sending message via channel");
-        }
-        Err(e) => {
-            error!("Error while deserializing message: {e}");
-        }
-    };
 }

@@ -9,12 +9,7 @@ use crate::Msg;
 use bincode::deserialize;
 use bincode::serialize;
 
-pub fn handle_new_block(
-    msg: &Msg,
-    blockchain: &Vec<Block>,
-    nodes: &Vec<&str>,
-    block_pending: &mut Vec<(Block, u8)>,
-) {
+pub fn handle_new_block(msg: &Msg, blockchain: &Vec<Block>, block_pending: &mut Vec<(Block, u8)>) {
     match deserialize::<Block>(&msg.data) {
         Ok(s) => {
             if (s.id as usize) != blockchain.len() {
@@ -23,13 +18,15 @@ pub fn handle_new_block(
             }
             match verify_new_block(s, blockchain) {
                 Ok(s) => {
-                    send_all(
-                        Msg {
-                            command: Comm::Accepted,
-                            data: serialize(&s).unwrap(),
-                        },
-                        nodes,
-                    );
+                    match send_all(Msg {
+                        command: Comm::Accepted,
+                        data: serialize(&s).unwrap(),
+                    }) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!("Error while multicasting accepted message: {e}");
+                        }
+                    }
 
                     block_pending.push((s, 1));
                 }

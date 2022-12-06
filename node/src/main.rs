@@ -1,6 +1,6 @@
 use chrono::Local;
 use env_logger::Builder;
-use lib::{broadcast_chain, handle_msg, listen};
+use lib::{handle_msg, networking::broadcast_chain, networking::listen};
 use lib::{Block, Comm, Msg};
 use log::LevelFilter;
 use log::{debug, info};
@@ -29,10 +29,7 @@ fn main() {
 
     let (tx_listener, rx_main) = mpsc::channel::<Msg>();
 
-    let nodes = env::var("NODES").expect("Couldn't access NODES env variable.");
     let node_name = env::var("NAME").expect("Couldn't access NODES env variable.");
-
-    let nodes_vec: Vec<&str> = nodes.split(",").collect();
 
     let mut blocks: Vec<Block> = Vec::new();
     let mut blocks_pending: Vec<(Block, u8)> = Vec::new();
@@ -62,17 +59,11 @@ fn main() {
         debug!("Received msg: {:#?}", msg);
         match msg.command {
             Comm::Broadcast => {
-                broadcast_chain(&blocks, &nodes_vec);
+                broadcast_chain(&blocks);
             }
             _ => {}
         }
-        handle_msg(
-            msg,
-            &mut blocks,
-            &nodes_vec,
-            &mut blocks_pending,
-            &node_name,
-        );
+        handle_msg(msg, &mut blocks, &mut blocks_pending, &node_name);
 
         let mut index: usize = 0;
 
