@@ -51,10 +51,8 @@ fn handle_incoming(bytes: Vec<u8>, tx: Sender<Msg>) {
 pub fn send_all(msg: Msg) -> Result<(), Box<dyn std::error::Error>> {
     let socket: UdpSocket = UdpSocket::bind("0.0.0.0:8000")?;
 
-    debug!(
-        "Broadcasted {} bytes",
-        socket.send_to(&serialize(&msg)?, "239.0.0.1:9000")?
-    );
+    let bytes = socket.send_to(&serialize(&msg)?, "239.0.0.1:9000")?;
+    debug!("Broadcasted {} bytes", bytes);
 
     Ok(())
 }
