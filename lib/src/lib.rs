@@ -3,10 +3,12 @@ pub mod networking;
 use crate::networking::send_all;
 use bincode::deserialize;
 use bincode::serialize;
+use crossbeam_channel::Receiver;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt;
+use std::sync::mpsc::Sender;
 
 const HASH_LEN: usize = 32;
 
@@ -43,6 +45,7 @@ pub enum Comm {
     PrintChain,
     Broadcast,
     Blockchain,
+    EndMining,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -64,6 +67,19 @@ impl Car {
             owner_surname: owner_surname.unwrap_or("".to_string()),
             distance_traveled: distance_traveled.unwrap_or(0),
             vin_number: vin_number.unwrap_or(Vin::new(None, None, None)),
+        }
+    }
+}
+
+impl Block {
+    pub fn new_empty() -> Block {
+        Block {
+            hash: [0; HASH_LEN],
+            id: 0,
+            prev_hash: [0; HASH_LEN],
+            nonce: 0,
+            registered_car: Car::new(None, None, None, None),
+            mined_by: "".to_string(),
         }
     }
 }
@@ -170,51 +186,50 @@ fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'st
     verify_block(block)
 }
 
-fn mint_block(
+pub fn mint_block(
     msg: &Msg,
-    blockchain: &Vec<Block>,
-    blocks_pending: &mut Vec<(Block, u8)>,
+    last_block: Block,
     node_name: &String,
-) {
-    match deserialize::<Car>(&msg.data) {
-        Ok(s) => {
-            let mut new_block = Block {
-                hash: [0; HASH_LEN],
-                id: 0,
-                nonce: 0,
-                prev_hash: [0; HASH_LEN],
-                registered_car: s,
-                mined_by: node_name.to_string(),
-            };
+    tx: Sender<Msg>,
+    rx: Receiver<Msg>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let car = deserialize::<Car>(&msg.data)?;
+    let mut new_block = Block {
+        hash: [0; HASH_LEN],
+        id: 0,
+        nonce: 0,
+        prev_hash: [0; HASH_LEN],
+        registered_car: car,
+        mined_by: node_name.to_string(),
+    };
 
-            match blockchain.last() {
-                Some(last_block) => new_block.prev_hash = last_block.hash,
-                None => new_block.prev_hash = [0; HASH_LEN],
-            };
-
-            new_block.id = blockchain.len() as u32;
-
-            let calculated = mine_block(&mut new_block).expect("Error during minting!");
-            new_block.nonce = calculated.0;
-            new_block.hash = calculated.1;
-            blocks_pending.push((new_block.clone(), 1));
-            match send_all(Msg {
-                command: Comm::NewBlock,
-                data: serialize(&new_block).unwrap(),
-            }) {
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("Error while multicasting block: {e}");
-                }
-            }
-        }
-        Err(e) => {
-            warn!("Couldn't deserialize car: {e}");
-        }
+    new_block.prev_hash = last_block.hash;
+    if new_block.prev_hash == [0; HASH_LEN] {
+        new_block.id = 0;
+    } else {
+        new_block.id = last_block.id + 1;
     }
+
+    let calculated = mine_block(&mut new_block, rx).expect("Error during minting!");
+    new_block.nonce = calculated.0;
+    new_block.hash = calculated.1;
+
+    tx.send(Msg {
+        command: Comm::NewBlock,
+        data: serialize(&new_block)?,
+    })?;
+
+    send_all(Msg {
+        command: Comm::NewBlock,
+        data: serialize(&new_block).unwrap(),
+    })?;
+    Ok(())
 }
 
-fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static str> {
+fn mine_block(
+    new_block: &mut Block,
+    rx: Receiver<Msg>,
+) -> Result<(u32, [u8; HASH_LEN]), &'static str> {
     let mut bytes: Vec<u8> = Vec::new();
 
     bytes.extend(&new_block.id.to_be_bytes());
@@ -225,6 +240,9 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     let mut nonce: u32 = 0;
 
     while 1 == 1 {
+        if !rx.is_empty() {
+            return Err("Mining stopped via message.");
+        }
         let mut sha2_hash = Sha256::new();
         sha2_hash.update(&bytes);
         sha2_hash.update(nonce.to_be_bytes());
@@ -241,12 +259,7 @@ fn mine_block(new_block: &mut Block) -> Result<(u32, [u8; HASH_LEN]), &'static s
     Err("Nonce couldn't be found")
 }
 
-pub fn handle_msg(
-    msg: Msg,
-    blockchain: &mut Vec<Block>,
-    blocks_pending: &mut Vec<(Block, u8)>,
-    node_name: &String,
-) {
+pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, blocks_pending: &mut Vec<(Block, u8)>) {
     match msg.command {
         Comm::NewBlock => match handlers::handle_new_block(&msg, blockchain, blocks_pending) {
             Ok(_) => {}
@@ -260,9 +273,6 @@ pub fn handle_msg(
                 warn!("Error while handling accepted: {e}");
             }
         },
-        Comm::DataToBlock => {
-            mint_block(&msg, blockchain, blocks_pending, node_name);
-        }
         Comm::PrintChain => {
             info!("Current blockchain status: \n{:?}", blockchain);
         }
