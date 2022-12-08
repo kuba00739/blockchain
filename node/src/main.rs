@@ -4,8 +4,7 @@ use env_logger::Builder;
 use lib::datatypes::{Block, Comm, Msg};
 use lib::mint_block;
 use lib::{handle_msg, networking::broadcast_chain, networking::listen};
-use log::{debug, info};
-use log::{warn, LevelFilter};
+use log::{debug, LevelFilter};
 use std::env;
 use std::io::Write;
 use std::sync::mpsc;
@@ -33,7 +32,6 @@ fn main() {
     let node_name = env::var("NAME").expect("Couldn't access NODES env variable.");
 
     let mut blocks: Vec<Block> = Vec::new();
-    let mut blocks_pending: Vec<(Block, u8)> = Vec::new();
 
     let tx1 = tx_listener.clone();
 
@@ -72,6 +70,7 @@ fn main() {
                         if is_miner_running {
                             continue;
                         }
+                        (tx_main_mint, rx_main_mint) = unbounded::<Msg>();
                     }
                     false => {}
                 }
@@ -103,29 +102,6 @@ fn main() {
             }
             _ => {}
         }
-        handle_msg(msg, &mut blocks, &mut blocks_pending);
-
-        while 0 < blocks_pending.len() {
-            if (blocks_pending[0].0.id as usize) != blocks.len() {
-                blocks_pending.remove(0);
-                continue;
-            }
-            info!("Accepting block: {:#?}", blocks_pending[0].0);
-            blocks.push(blocks_pending[0].0.clone());
-            blocks_pending.remove(0);
-
-            match tx_main_mint.send(Msg {
-                command: Comm::EndMining,
-                data: Vec::new(),
-            }) {
-                Ok(_) => {
-                    (tx_main_mint, rx_main_mint) = unbounded::<Msg>();
-                    debug!("Sending stop message to miner thread.");
-                }
-                Err(_) => {
-                    warn!("Couldn't send stop message to miner thread.");
-                }
-            }
-        }
+        handle_msg(msg, &mut blocks, &tx_main_mint);
     }
 }

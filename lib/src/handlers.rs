@@ -1,3 +1,4 @@
+use log::info;
 use log::{debug, warn};
 
 use crate::send_all;
@@ -8,11 +9,12 @@ use crate::Comm;
 use crate::Msg;
 use bincode::deserialize;
 use bincode::serialize;
+use crossbeam_channel::Sender;
 
 pub fn handle_new_block(
     msg: &Msg,
-    blockchain: &Vec<Block>,
-    block_pending: &mut Vec<(Block, u8)>,
+    blockchain: &mut Vec<Block>,
+    tx: &Sender<Msg>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let block = deserialize::<Block>(&msg.data)?;
     if (block.id as usize) != blockchain.len() {
@@ -30,22 +32,16 @@ pub fn handle_new_block(
         }
     }
 
-    block_pending.push((block, 1));
+    tx.send(Msg{
+        command: Comm::EndMining,
+        data: Vec::new()
+        
+    })?;
+    info!("Adding new block: {block}");
+    blockchain.push(block);
     Ok(())
 }
 
-pub fn handle_accepted(
-    msg: &Msg,
-    blocks_pending: &mut Vec<(Block, u8)>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let block = deserialize::<Block>(&msg.data)?;
-    for pending in blocks_pending {
-        if block == pending.0 {
-            pending.1 += 1;
-        }
-    }
-    Ok(())
-}
 
 pub fn handle_incoming_blockchain(
     msg: &Msg,

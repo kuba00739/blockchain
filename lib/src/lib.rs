@@ -5,10 +5,10 @@ pub use crate::datatypes::{Block, Car, Comm, Msg, HASH_LEN};
 use crate::networking::send_all;
 use bincode::deserialize;
 use bincode::serialize;
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::Sender as StdSender;
 
 fn verify_block(block: Block) -> Result<Block, &'static str> {
     let mut bytes: Vec<u8> = Vec::new();
@@ -68,7 +68,7 @@ pub fn mint_block(
     msg: &Msg,
     last_block: Block,
     node_name: &String,
-    tx: Sender<Msg>,
+    tx: StdSender<Msg>,
     rx: Receiver<Msg>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let car = deserialize::<Car>(&msg.data)?;
@@ -137,18 +137,12 @@ fn mine_block(
     Err("Nonce couldn't be found")
 }
 
-pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, blocks_pending: &mut Vec<(Block, u8)>) {
+pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, tx: &Sender<Msg>) {
     match msg.command {
-        Comm::NewBlock => match handlers::handle_new_block(&msg, blockchain, blocks_pending) {
+        Comm::NewBlock => match handlers::handle_new_block(&msg, blockchain, tx) {
             Ok(_) => {}
             Err(e) => {
                 warn!("Error during new block handling: {e}");
-            }
-        },
-        Comm::Accepted => match handlers::handle_accepted(&msg, blocks_pending) {
-            Ok(_) => {}
-            Err(e) => {
-                warn!("Error while handling accepted: {e}");
             }
         },
         Comm::PrintChain => {
