@@ -6,11 +6,19 @@ use crate::networking::send_all;
 use bincode::deserialize;
 use bincode::serialize;
 use crossbeam_channel::{Receiver, Sender};
+use datatypes::BlockchainError;
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::Sender as StdSender;
 
-fn verify_block(block: Block) -> Result<Block, &'static str> {
+#[macro_export]
+macro_rules! ret_err {
+    ( $x:expr ) => {{
+        return Err(Box::new(BlockchainError($x.into())));
+    }};
+}
+
+fn verify_block(block: Block) -> Result<Block, Box<dyn std::error::Error>> {
     let mut bytes: Vec<u8> = Vec::new();
     bytes.extend(&block.id.to_be_bytes());
 
@@ -26,10 +34,13 @@ fn verify_block(block: Block) -> Result<Block, &'static str> {
     if (sum[0] == 0) && (sum[1] == 0) && (sum[2] == 0) && (sum[3] <= 128) {
         return Ok(block);
     }
-    Err("Hash in improper form for this nonce.")
+    ret_err!("Hash in improper form for this nonce.");
 }
 
-fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
+fn verify_broadcasted_block(
+    block: Block,
+    blockchain: &Vec<Block>,
+) -> Result<Block, Box<dyn std::error::Error>> {
     debug!("Verifying block: {block}");
 
     let control_prev_hash: [u8; 32] = if (block.id == 0) || (blockchain.len() == 0) {
@@ -39,17 +50,20 @@ fn verify_broadcasted_block(block: Block, blockchain: &Vec<Block>) -> Result<Blo
     };
 
     if control_prev_hash != block.prev_hash {
-        return Err("Previous hash don't match!");
+        ret_err!("Previous hash don't match!");
     }
 
     verify_block(block)
 }
 
-fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'static str> {
+fn verify_new_block(
+    block: Block,
+    blockchain: &Vec<Block>,
+) -> Result<Block, Box<dyn std::error::Error>> {
     debug!("Verifying block: {block}");
 
     if (block.id as usize) != blockchain.len() {
-        return Err("Block ID don't match blockchain lenght.");
+        ret_err!("Block ID don't match blockchain lenght.");
     }
 
     let control_prev_hash: [u8; 32] = match blockchain.last() {
@@ -58,7 +72,7 @@ fn verify_new_block(block: Block, blockchain: &Vec<Block>) -> Result<Block, &'st
     };
 
     if control_prev_hash != block.prev_hash {
-        return Err("Previous hash don't match!");
+        ret_err!("Previous hash don't match!");
     }
 
     verify_block(block)
@@ -107,7 +121,7 @@ pub fn mint_block(
 fn mine_block(
     new_block: &mut Block,
     rx: Receiver<Msg>,
-) -> Result<(u32, [u8; HASH_LEN]), &'static str> {
+) -> Result<(u32, [u8; HASH_LEN]), Box<dyn std::error::Error>> {
     let mut bytes: Vec<u8> = Vec::new();
 
     bytes.extend(&new_block.id.to_be_bytes());
@@ -119,7 +133,7 @@ fn mine_block(
 
     while 1 == 1 {
         if !rx.is_empty() {
-            return Err("Mining stopped via message.");
+            ret_err!("Mining stopped via message.");
         }
         let mut sha2_hash = Sha256::new();
         sha2_hash.update(&bytes);
@@ -134,7 +148,7 @@ fn mine_block(
         };
         nonce += 1;
     }
-    Err("Nonce couldn't be found")
+    ret_err!("Nonce couldn't be found");
 }
 
 pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, tx: &Sender<Msg>) {

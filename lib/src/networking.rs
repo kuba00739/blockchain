@@ -1,6 +1,6 @@
 use crate::{Block, Comm, Msg};
 use bincode::{deserialize, serialize};
-use log::{debug, error, warn};
+use log::{debug, warn};
 use std::net::{Ipv4Addr, UdpSocket};
 use std::str::FromStr;
 use std::sync::mpsc::Sender;
@@ -29,23 +29,21 @@ pub fn listen(tx: Sender<Msg>) {
 
         threads.push(thread::spawn({
             let tx1 = tx.clone();
-            move || {
-                handle_incoming(bytes, tx1);
+            move || match handle_incoming(bytes, tx1) {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("Error while handling incoming message: {e}")
+                }
             }
         }));
     }
 }
 
-fn handle_incoming(bytes: Vec<u8>, tx: Sender<Msg>) {
-    match deserialize::<Msg>(&bytes) {
-        Ok(s) => {
-            debug!("Received message: {:#?}", s);
-            tx.send(s).expect("Error while sending message via channel");
-        }
-        Err(e) => {
-            error!("Error while deserializing message: {e}");
-        }
-    };
+fn handle_incoming(bytes: Vec<u8>, tx: Sender<Msg>) -> Result<(), Box<dyn std::error::Error>> {
+    let msg = deserialize::<Msg>(&bytes)?;
+    debug!("Received message: {:#?}", msg);
+    tx.send(msg)?;
+    Ok(())
 }
 
 pub fn send_all(msg: Msg) -> Result<(), Box<dyn std::error::Error>> {

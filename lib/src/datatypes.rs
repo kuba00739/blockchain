@@ -3,6 +3,9 @@ use std::fmt;
 
 pub const HASH_LEN: usize = 32;
 
+#[derive(Debug)]
+pub struct BlockchainError(pub String);
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct Vin {
     wmi: String,
@@ -113,6 +116,14 @@ impl fmt::Debug for Block {
         )
     }
 }
+
+impl fmt::Display for BlockchainError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error: {}", self.0)
+    }
+}
+
+impl std::error::Error for BlockchainError {}
 
 fn format_hash(hash: [u8; HASH_LEN]) -> String {
     let mut formatted = String::new();
