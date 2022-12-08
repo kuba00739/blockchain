@@ -1,9 +1,9 @@
 use chrono::Local;
 use crossbeam_channel::unbounded;
 use env_logger::Builder;
+use lib::datatypes::{Block, Comm, Msg};
 use lib::mint_block;
 use lib::{handle_msg, networking::broadcast_chain, networking::listen};
-use lib::{Block, Comm, Msg};
 use log::{debug, info};
 use log::{warn, LevelFilter};
 use std::env;
@@ -12,8 +12,6 @@ use std::sync::mpsc;
 use std::thread::sleep;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-
-//TODO- new thread for block mining: Can use handle_new_block
 
 fn main() {
     Builder::new()
@@ -96,7 +94,7 @@ fn main() {
                     ) {
                         Ok(_) => {}
                         Err(e) => {
-                            warn!("Error during minting: {e}");
+                            debug!("Error during minting: {e}");
                         }
                     }
                 }));
