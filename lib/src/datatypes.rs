@@ -113,7 +113,7 @@ impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Data: {}]\n",
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Data: {}]",
             self.id,
             format_hash(self.hash),
             format_hash(self.prev_hash),
@@ -127,7 +127,7 @@ impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Nonce: {}]\n",
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Nonce: {}]",
             self.id,
             format_hash(self.hash),
             format_hash(self.prev_hash),

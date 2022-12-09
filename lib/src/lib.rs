@@ -215,15 +215,22 @@ fn reverse_polish(
             }
             Operation(c) => {
                 let result: i32;
-                if c == '+' {
-                    result = parsed_ints.pop().unwrap() + parsed_ints.pop().unwrap();
-                    parsed_ints.push(result);
-                } else if c == '-' {
-                    result = parsed_ints.pop().unwrap() - parsed_ints.pop().unwrap();
-                    parsed_ints.push(result);
-                } else if c == '*' {
-                    result = parsed_ints.pop().unwrap() * parsed_ints.pop().unwrap();
-                    parsed_ints.push(result);
+                match c {
+                    '+' => {
+                        result = parsed_ints.pop().unwrap() + parsed_ints.pop().unwrap();
+                        parsed_ints.push(result);
+                    }
+                    '-' => {
+                        result = parsed_ints.pop().unwrap() - parsed_ints.pop().unwrap();
+                        parsed_ints.push(result);
+                    }
+                    '*' => {
+                        result = parsed_ints.pop().unwrap() * parsed_ints.pop().unwrap();
+                        parsed_ints.push(result);
+                    }
+                    _ => {
+                        ret_err!("Unknown sign");
+                    }
                 }
             }
             Arg => {
