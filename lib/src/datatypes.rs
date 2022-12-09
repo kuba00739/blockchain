@@ -26,13 +26,20 @@ pub struct Block {
     pub id: u32,
     pub prev_hash: [u8; HASH_LEN],
     pub nonce: u32,
-    pub registered_car: Car,
+    pub data: BlockData,
     pub mined_by: String,
 }
 
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub enum RevPolish {
     Number(i32),
     Operation(char),
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub enum BlockData {
+    Contract(Vec<RevPolish>),
+    Car(Car),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,7 +84,7 @@ impl Block {
             id: 0,
             prev_hash: [0; HASH_LEN],
             nonce: 0,
-            registered_car: Car::new(None, None, None, None),
+            data: BlockData::Car(Car::new(None, None, None, None)),
             mined_by: "".to_string(),
         }
     }
@@ -97,13 +104,12 @@ impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Car owner: {} {}]\n",
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Data: {}]\n",
             self.id,
             format_hash(self.hash),
             format_hash(self.prev_hash),
             self.mined_by,
-            self.registered_car.owner_name,
-            self.registered_car.owner_surname
+            self.data,
         )
     }
 }
@@ -129,6 +135,19 @@ impl fmt::Display for BlockchainError {
 }
 
 impl std::error::Error for BlockchainError {}
+
+impl fmt::Display for BlockData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BlockData::Contract(s) => {
+                write!(f, "Contract: {:#?}", s)
+            }
+            BlockData::Car(s) => {
+                write!(f, "Car owner: {} {}", s.owner_name, s.owner_surname)
+            }
+        }
+    }
+}
 
 fn format_hash(hash: [u8; HASH_LEN]) -> String {
     let mut formatted = String::new();

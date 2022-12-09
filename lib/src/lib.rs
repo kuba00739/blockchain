@@ -1,13 +1,12 @@
 pub mod datatypes;
 mod handlers;
 pub mod networking;
-pub use crate::datatypes::{Block, Car, Comm, Msg, HASH_LEN};
+pub use crate::datatypes::{Block, BlockData, Car, Comm, Msg, RevPolish, HASH_LEN};
 use crate::networking::send_all;
 use bincode::deserialize;
 use bincode::serialize;
 use crossbeam_channel::{Receiver, Sender};
 use datatypes::BlockchainError;
-use datatypes::RevPolish;
 use datatypes::RevPolish::{Number, Operation};
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
@@ -25,7 +24,7 @@ fn verify_block(block: Block) -> Result<Block, Box<dyn std::error::Error>> {
     bytes.extend(&block.id.to_be_bytes());
 
     bytes.extend(&block.prev_hash);
-    bytes.extend(&serialize(&block.registered_car).unwrap());
+    bytes.extend(&serialize(&block.data).unwrap());
     bytes.extend(&serialize(&block.mined_by).unwrap());
 
     let mut sha2_hash = Sha256::new();
@@ -87,13 +86,13 @@ pub fn mint_block(
     tx: StdSender<Msg>,
     rx: Receiver<Msg>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let car = deserialize::<Car>(&msg.data)?;
+    let data = deserialize::<BlockData>(&msg.data)?;
     let mut new_block = Block {
         hash: [0; HASH_LEN],
         id: 0,
         nonce: 0,
         prev_hash: [0; HASH_LEN],
-        registered_car: car,
+        data: data,
         mined_by: node_name.to_string(),
     };
 
@@ -128,7 +127,7 @@ fn mine_block(
 
     bytes.extend(&new_block.id.to_be_bytes());
     bytes.extend(&new_block.prev_hash);
-    bytes.extend(&serialize(&new_block.registered_car).unwrap());
+    bytes.extend(&serialize(&new_block.data).unwrap());
     bytes.extend(&serialize(&new_block.mined_by).unwrap());
 
     let mut nonce: u32 = 0;
