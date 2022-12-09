@@ -40,7 +40,8 @@ pub enum RevPolish {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct ContractResult {
     pub block_id: u32,
-    pub result: u32,
+    pub args: Vec<i32>,
+    pub result: i32,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -54,12 +55,12 @@ pub enum BlockData {
 pub enum Comm {
     NewBlock,
     Accepted,
-    Rejected,
     DataToBlock,
     PrintChain,
     Broadcast,
     Blockchain,
     EndMining,
+    CalcContract,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -154,7 +155,7 @@ impl fmt::Display for BlockData {
                 write!(f, "Car owner: {} {}", s.owner_name, s.owner_surname)
             }
             BlockData::ContractResult(s) => {
-                write!(f, "Contract ID: {}, result: {}", s.block_id, s.result)
+                write!(f, "Contract ID: {}, result: {}, args: {:?}", s.block_id, s.result, s.args)
             }
         }
     }

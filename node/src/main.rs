@@ -102,6 +102,6 @@ fn main() {
             }
             _ => {}
         }
-        handle_msg(msg, &mut blocks, &tx_main_mint);
+        handle_msg(msg, &mut blocks, &tx_main_mint, &tx_listener);
     }
 }

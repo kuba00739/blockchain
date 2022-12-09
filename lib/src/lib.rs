@@ -8,6 +8,7 @@ use bincode::serialize;
 use crossbeam_channel::{Receiver, Sender};
 use datatypes::BlockchainError;
 use datatypes::RevPolish::{Arg, Number, Operation};
+use handlers::handle_calc_contract;
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::Sender as StdSender;
@@ -152,7 +153,12 @@ fn mine_block(
     ret_err!("Nonce couldn't be found");
 }
 
-pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, tx: &Sender<Msg>) {
+pub fn handle_msg(
+    msg: Msg,
+    blockchain: &mut Vec<Block>,
+    tx: &Sender<Msg>,
+    tx_loopback: &std::sync::mpsc::Sender<Msg>,
+) {
     match msg.command {
         Comm::NewBlock => match handlers::handle_new_block(&msg, blockchain, tx) {
             Ok(_) => {}
@@ -172,16 +178,27 @@ pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, tx: &Sender<Msg>) {
                 debug!("New blockchain verification failed: {e}");
             }
         },
+        Comm::CalcContract => match handle_calc_contract(&msg, tx_loopback, blockchain) {
+            Ok(()) => {
+                info!("Calculated contract value");
+            }
+            Err(e) => {
+                warn!("Error calculating contract: {e}");
+            }
+        },
 
         _ => {}
     }
 }
 
 fn reverse_polish(
-    contract: &mut Vec<RevPolish>,
-    args: &mut Vec<i32>,
+    contract_orig: &Vec<RevPolish>,
+    args_orig: &Vec<i32>,
 ) -> Result<i32, Box<dyn std::error::Error>> {
     let mut parsed_ints: Vec<i32> = Vec::new();
+    let mut contract = contract_orig.clone();
+    let mut args = args_orig.clone();
+
     loop {
         let value: RevPolish;
         match contract.pop() {

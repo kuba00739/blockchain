@@ -12,15 +12,20 @@ static NAMES: [&str; 10] = [
     "James", "Oliver", "Max", "Muller", "Bravo", "Fox", "Jimmy", "Jakub", "Willy", "Billy",
 ];
 
+fn send_data(socket: UdpSocket, msg: Msg) {
+    println!(
+        "Broadcasted {} bytes",
+        socket
+            .send_to(
+                &serialize(&msg).expect("Error serializing"),
+                "239.0.0.1:9000"
+            )
+            .expect("Error sending message")
+    );
+}
+
 fn main() {
     let mut rng = rand::thread_rng();
-
-    let data = BlockData::Car(Car::new(
-        Some(NAMES[rng.gen_range(0..9)].to_string()),
-        Some(NAMES[rng.gen_range(0..9)].to_string()),
-        Some(rng.gen_range(0..1000000)),
-        None,
-    ));
 
     let argv: Vec<String> = env::args().collect();
     let socket: UdpSocket = UdpSocket::bind("192.168.128.253:8000").expect("Error while binding");
@@ -32,34 +37,28 @@ fn main() {
 
     match argv[1].to_uppercase().as_str() {
         "DUMP" => {
-            println!(
-                "Broadcasted {} bytes",
-                socket
-                    .send_to(
-                        &serialize(&Msg {
-                            command: Comm::PrintChain,
-                            data: Vec::new(),
-                        })
-                        .expect("Error serializing"),
-                        "239.0.0.1:9000"
-                    )
-                    .expect("Error sending message")
+            send_data(
+                socket,
+                Msg {
+                    command: Comm::PrintChain,
+                    data: Vec::new(),
+                },
             );
             return;
         }
         "CAR" => {
-            println!(
-                "Broadcasted {} bytes",
-                socket
-                    .send_to(
-                        &serialize(&Msg {
-                            command: Comm::DataToBlock,
-                            data: serialize(&data).unwrap(),
-                        })
-                        .expect("Error serializing"),
-                        "239.0.0.1:9000"
-                    )
-                    .expect("Error sending message")
+            let data = BlockData::Car(Car::new(
+                Some(NAMES[rng.gen_range(0..9)].to_string()),
+                Some(NAMES[rng.gen_range(0..9)].to_string()),
+                Some(rng.gen_range(0..1000000)),
+                None,
+            ));
+            send_data(
+                socket,
+                Msg {
+                    command: Comm::DataToBlock,
+                    data: serialize(&data).unwrap(),
+                },
             );
         }
         "CONT" => {
@@ -80,20 +79,28 @@ fn main() {
                 }
             }
 
-            let data2 = BlockData::Contract(contract);
+            let data = BlockData::Contract(contract);
 
-            println!(
-                "Broadcasted {} bytes",
-                socket
-                    .send_to(
-                        &serialize(&Msg {
-                            command: Comm::DataToBlock,
-                            data: serialize(&data2).unwrap(),
-                        })
-                        .expect("Error serializing"),
-                        "239.0.0.1:9000"
-                    )
-                    .expect("Error sending message")
+            send_data(
+                socket,
+                Msg {
+                    command: Comm::DataToBlock,
+                    data: serialize(&data).unwrap(),
+                },
+            );
+        }
+        "CALC" => {
+            let mut args: Vec<i32> = Vec::new();
+            for i in &argv[2..] {
+                args.push(i.parse().expect("Unexpected string!"));
+            }
+
+            send_data(
+                socket,
+                Msg {
+                    command: Comm::CalcContract,
+                    data: serialize(&args).unwrap(),
+                },
             );
         }
         _ => {

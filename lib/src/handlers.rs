@@ -1,13 +1,13 @@
 use log::info;
 use log::{debug, warn};
 
-use crate::datatypes::BlockchainError;
-use crate::verify_broadcasted_block;
+use crate::datatypes::{BlockData, BlockchainError, ContractResult};
 use crate::verify_new_block;
 use crate::Block;
 use crate::Comm;
 use crate::Msg;
 use crate::{ret_err, send_all};
+use crate::{reverse_polish, verify_broadcasted_block};
 use bincode::deserialize;
 use bincode::serialize;
 use crossbeam_channel::Sender;
@@ -59,4 +59,44 @@ pub fn handle_incoming_blockchain(
         ctr += 1;
     }
     return Ok(new_blockchain.clone());
+}
+
+pub fn handle_calc_contract(
+    msg: &Msg,
+    tx: &std::sync::mpsc::Sender<Msg>,
+    blockchain: &mut Vec<Block>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = deserialize::<Vec<i32>>(&msg.data)?;
+    let block_id: usize;
+    match args.pop() {
+        Some(s) => {
+            block_id = s as usize;
+        }
+        None => {
+            ret_err!("Couldn't extract block id");
+        }
+    }
+    if block_id >= blockchain.len() {
+        ret_err!("Block id is bigger than blockchain lenght");
+    }
+    let block_data = &blockchain[block_id].data;
+
+    match block_data {
+        crate::BlockData::Contract(s) => {
+            let data = BlockData::ContractResult(ContractResult {
+                block_id: (block_id as u32),
+                result: reverse_polish(s, &args)?,
+                args,
+            });
+            tx.send(Msg {
+                command: Comm::DataToBlock,
+                data: serialize(&data)?,
+            })?;
+        }
+        _ => {
+            ret_err!("Provided block doesn't hold contract.");
+        }
+    }
+
+    Ok(())
 }
