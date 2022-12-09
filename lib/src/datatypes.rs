@@ -30,6 +30,11 @@ pub struct Block {
     pub mined_by: String,
 }
 
+pub enum RevPolish {
+    Number(i32),
+    Operation(char),
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Comm {
     NewBlock,
