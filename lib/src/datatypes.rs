@@ -155,7 +155,11 @@ impl fmt::Display for BlockData {
                 write!(f, "Car owner: {} {}", s.owner_name, s.owner_surname)
             }
             BlockData::ContractResult(s) => {
-                write!(f, "Contract ID: {}, result: {}, args: {:?}", s.block_id, s.result, s.args)
+                write!(
+                    f,
+                    "Contract ID: {}, result: {}, args: {:?}",
+                    s.block_id, s.result, s.args
+                )
             }
         }
     }
