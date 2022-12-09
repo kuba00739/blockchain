@@ -71,6 +71,8 @@ fn main() {
                     contract.push(RevPolish::Operation('-'));
                 } else if i.as_str() == "*" {
                     contract.push(RevPolish::Operation('*'));
+                } else if i.as_str() == "a" {
+                    contract.push(RevPolish::Arg);
                 } else {
                     contract.push(RevPolish::Number(
                         i.as_str().parse::<i32>().expect("Unexpected string!"),

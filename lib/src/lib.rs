@@ -7,7 +7,7 @@ use bincode::deserialize;
 use bincode::serialize;
 use crossbeam_channel::{Receiver, Sender};
 use datatypes::BlockchainError;
-use datatypes::RevPolish::{Number, Operation};
+use datatypes::RevPolish::{Arg, Number, Operation};
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::Sender as StdSender;
@@ -177,11 +177,14 @@ pub fn handle_msg(msg: Msg, blockchain: &mut Vec<Block>, tx: &Sender<Msg>) {
     }
 }
 
-fn reverse_polish(input: &mut Vec<RevPolish>) -> Result<i32, Box<dyn std::error::Error>> {
+fn reverse_polish(
+    contract: &mut Vec<RevPolish>,
+    args: &mut Vec<i32>,
+) -> Result<i32, Box<dyn std::error::Error>> {
     let mut parsed_ints: Vec<i32> = Vec::new();
     loop {
         let value: RevPolish;
-        match input.pop() {
+        match contract.pop() {
             Some(s) => {
                 value = s;
             }
@@ -206,6 +209,9 @@ fn reverse_polish(input: &mut Vec<RevPolish>) -> Result<i32, Box<dyn std::error:
                     parsed_ints.push(result);
                 }
             }
+            Arg => {
+                parsed_ints.push(args.pop().unwrap());
+            }
         }
     }
 }
@@ -215,14 +221,14 @@ mod tests {
     use std::vec;
 
     use crate::{
-        datatypes::RevPolish, datatypes::RevPolish::Number, datatypes::RevPolish::Operation,
-        reverse_polish,
+        datatypes::RevPolish, datatypes::RevPolish::Arg, datatypes::RevPolish::Number,
+        datatypes::RevPolish::Operation, reverse_polish,
     };
 
     #[test]
     fn test_rev_polish() {
         let mut input: Vec<RevPolish> = vec![Operation('+'), Number(0), Number(1)];
-        assert_eq!(reverse_polish(&mut input).unwrap(), 1);
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 1);
         input = vec![
             Operation('*'),
             Number(2),
@@ -230,7 +236,7 @@ mod tests {
             Number(3),
             Number(5),
         ];
-        assert_eq!(reverse_polish(&mut input).unwrap(), 16);
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 16);
         input = vec![
             Operation('*'),
             Number(2),
@@ -238,6 +244,11 @@ mod tests {
             Number(3),
             Number(5),
         ];
-        assert_eq!(reverse_polish(&mut input).unwrap(), -4);
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), -4);
+
+        let mut args: Vec<i32> = vec![3, 5];
+        input = vec![Operation('*'), Number(2), Operation('-'), Arg, Arg];
+
+        assert_eq!(reverse_polish(&mut input, &mut args).unwrap(), -4);
     }
 }

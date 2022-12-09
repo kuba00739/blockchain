@@ -34,12 +34,20 @@ pub struct Block {
 pub enum RevPolish {
     Number(i32),
     Operation(char),
+    Arg,
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub struct ContractResult {
+    pub block_id: u32,
+    pub result: u32,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub enum BlockData {
     Contract(Vec<RevPolish>),
     Car(Car),
+    ContractResult(ContractResult),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -140,10 +148,13 @@ impl fmt::Display for BlockData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BlockData::Contract(s) => {
-                write!(f, "Contract: {:#?}", s)
+                write!(f, "Contract: {:?}", s)
             }
             BlockData::Car(s) => {
                 write!(f, "Car owner: {} {}", s.owner_name, s.owner_surname)
+            }
+            BlockData::ContractResult(s) => {
+                write!(f, "Contract ID: {}, result: {}", s.block_id, s.result)
             }
         }
     }
