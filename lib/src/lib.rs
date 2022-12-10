@@ -217,15 +217,53 @@ fn reverse_polish(
                 let result: i32;
                 match c {
                     '+' => {
-                        result = parsed_ints.pop().unwrap() + parsed_ints.pop().unwrap();
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            + parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
                         parsed_ints.push(result);
                     }
                     '-' => {
-                        result = parsed_ints.pop().unwrap() - parsed_ints.pop().unwrap();
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            - parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
                         parsed_ints.push(result);
                     }
                     '*' => {
-                        result = parsed_ints.pop().unwrap() * parsed_ints.pop().unwrap();
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            * parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
+                        parsed_ints.push(result);
+                    }
+                    '%' => {
+                        let val1 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        if val2 == 0 {
+                            ret_err!("Error: division by 0");
+                        }
+
+                        parsed_ints.push(val1 % val2);
+                    }
+                    '^' => {
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            ^ parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
                         parsed_ints.push(result);
                     }
                     _ => {
@@ -234,7 +272,10 @@ fn reverse_polish(
                 }
             }
             Arg => {
-                parsed_ints.push(args.pop().unwrap());
+                parsed_ints.push(
+                    args.pop()
+                        .ok_or(BlockchainError("No value found".to_string()))?,
+                );
             }
         }
     }
