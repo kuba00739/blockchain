@@ -63,21 +63,12 @@ fn main() {
         }
         "CONT" => {
             let mut contract: Vec<RevPolish> = Vec::new();
+            let operations = ['+', '-', '*', '%', '/', 'p'];
             for i in &argv[2..] {
-                if i.as_str() == "+" {
-                    contract.push(RevPolish::Operation('+'));
-                } else if i.as_str() == "-" {
-                    contract.push(RevPolish::Operation('-'));
-                } else if i.as_str() == "*" {
-                    contract.push(RevPolish::Operation('*'));
+                if operations.contains(&i.as_str().chars().next().unwrap()) {
+                    contract.push(RevPolish::Operation(i.as_str().chars().next().unwrap()));
                 } else if i.as_str() == "a" {
                     contract.push(RevPolish::Arg);
-                } else if i.as_str() == "%" {
-                    contract.push(RevPolish::Operation('%'));
-                } else if i.as_str() == "/" {
-                    contract.push(RevPolish::Operation('/'));
-                } else if i.as_str() == "p" {
-                    contract.push(RevPolish::Operation('p'));
                 } else {
                     contract.push(RevPolish::Number(
                         i.as_str().parse::<f64>().expect("Unexpected string!"),
