@@ -20,7 +20,7 @@ pub struct Car {
     vin_number: Vin,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct Block {
     pub hash: [u8; HASH_LEN],
     pub id: u32,
@@ -30,21 +30,21 @@ pub struct Block {
     pub mined_by: String,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub enum RevPolish {
-    Number(i32),
+    Number(f64),
     Operation(char),
     Arg,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub struct ContractResult {
     pub block_id: u32,
-    pub args: Vec<i32>,
-    pub result: i32,
+    pub args: Vec<f64>,
+    pub result: f64,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Clone)]
 pub enum BlockData {
     Contract(Vec<RevPolish>),
     Car(Car),
@@ -111,7 +111,7 @@ impl Vin {
 
 impl fmt::Display for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
             "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Data: {}]",
             self.id,
@@ -125,14 +125,15 @@ impl fmt::Display for Block {
 
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
-            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Nonce: {}]",
+            "Block [ID: {} Hash: {} Prev Hash: {} Miner: {} Nonce: {} Data: {}]",
             self.id,
             format_hash(self.hash),
             format_hash(self.prev_hash),
             self.mined_by,
-            self.nonce
+            self.nonce,
+            self.data
         )
     }
 }

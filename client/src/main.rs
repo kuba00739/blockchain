@@ -74,11 +74,13 @@ fn main() {
                     contract.push(RevPolish::Arg);
                 } else if i.as_str() == "%" {
                     contract.push(RevPolish::Operation('%'));
-                } else if i.as_str() == "^" {
-                    contract.push(RevPolish::Operation('^'));
+                } else if i.as_str() == "/" {
+                    contract.push(RevPolish::Operation('/'));
+                } else if i.as_str() == "p" {
+                    contract.push(RevPolish::Operation('p'));
                 } else {
                     contract.push(RevPolish::Number(
-                        i.as_str().parse::<i32>().expect("Unexpected string!"),
+                        i.as_str().parse::<f64>().expect("Unexpected string!"),
                     ));
                 }
             }
@@ -94,7 +96,7 @@ fn main() {
             );
         }
         "CALC" => {
-            let mut args: Vec<i32> = Vec::new();
+            let mut args: Vec<f64> = Vec::new();
             for i in &argv[2..] {
                 args.push(i.parse().expect("Unexpected string!"));
             }

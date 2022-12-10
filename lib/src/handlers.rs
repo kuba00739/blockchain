@@ -66,7 +66,7 @@ pub fn handle_calc_contract(
     tx: &std::sync::mpsc::Sender<Msg>,
     blockchain: &mut Vec<Block>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = deserialize::<Vec<i32>>(&msg.data)?;
+    let mut args = deserialize::<Vec<f64>>(&msg.data)?;
     let block_id: usize;
     match args.pop() {
         Some(s) => {

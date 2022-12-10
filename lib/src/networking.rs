@@ -17,7 +17,7 @@ pub fn listen(tx: Sender<Msg>) {
         .expect("Error while joining multicast v4");
     let mut threads: Vec<JoinHandle<()>> = Vec::new();
     loop {
-        let mut bytes: Vec<u8> = vec![0; 4096];
+        let mut bytes: Vec<u8> = vec![0; 40960];
         let (len, addr) = match listener.recv_from(&mut bytes) {
             Ok(s) => s,
             Err(e) => {

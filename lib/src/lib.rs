@@ -167,7 +167,7 @@ pub fn handle_msg(
             }
         },
         Comm::PrintChain => {
-            info!("Current blockchain status: \n{:?}", blockchain);
+            info!("Current blockchain status: \n{:#?}", blockchain);
         }
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
@@ -193,9 +193,9 @@ pub fn handle_msg(
 
 fn reverse_polish(
     contract_orig: &Vec<RevPolish>,
-    args_orig: &Vec<i32>,
-) -> Result<i32, Box<dyn std::error::Error>> {
-    let mut parsed_ints: Vec<i32> = Vec::new();
+    args_orig: &Vec<f64>,
+) -> Result<f64, Box<dyn std::error::Error>> {
+    let mut parsed_ints: Vec<f64> = Vec::new();
     let mut contract = contract_orig.clone();
     let mut args = args_orig.clone();
 
@@ -214,7 +214,7 @@ fn reverse_polish(
                 parsed_ints.push(n);
             }
             Operation(c) => {
-                let result: i32;
+                let result: f64;
                 match c {
                     '+' => {
                         result = parsed_ints
@@ -251,21 +251,37 @@ fn reverse_polish(
                             .pop()
                             .ok_or(BlockchainError("No value found".to_string()))?;
 
-                        if val2 == 0 {
+                        if val2 == 0.0 {
                             ret_err!("Error: division by 0");
                         }
 
                         parsed_ints.push(val1 % val2);
                     }
-                    '^' => {
-                        result = parsed_ints
+                    '/' => {
+                        let val1 = parsed_ints
                             .pop()
-                            .ok_or(BlockchainError("No value found".to_string()))?
-                            ^ parsed_ints
-                                .pop()
-                                .ok_or(BlockchainError("No value found".to_string()))?;
-                        parsed_ints.push(result);
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        if val2 == 0.0 {
+                            ret_err!("Error: division by 0");
+                        }
+
+                        parsed_ints.push(val1 / val2);
                     }
+                    'p' => {
+                        let val1 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        parsed_ints.push(val1.powf(val2));
+                    }
+
                     _ => {
                         ret_err!("Unknown sign");
                     }
@@ -292,28 +308,28 @@ mod tests {
 
     #[test]
     fn test_rev_polish() {
-        let mut input: Vec<RevPolish> = vec![Operation('+'), Number(0), Number(1)];
-        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 1);
+        let mut input: Vec<RevPolish> = vec![Operation('+'), Number(0.0), Number(1.0)];
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 1.0);
         input = vec![
             Operation('*'),
-            Number(2),
+            Number(2.0),
             Operation('+'),
-            Number(3),
-            Number(5),
+            Number(3.0),
+            Number(5.0),
         ];
-        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 16);
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 16.0);
         input = vec![
             Operation('*'),
-            Number(2),
+            Number(2.0),
             Operation('-'),
-            Number(3),
-            Number(5),
+            Number(3.0),
+            Number(5.0),
         ];
-        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), -4);
+        assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), -4.0);
 
-        let mut args: Vec<i32> = vec![3, 5];
-        input = vec![Operation('*'), Number(2), Operation('-'), Arg, Arg];
+        let mut args: Vec<f64> = vec![3.0, 5.0];
+        input = vec![Operation('*'), Number(2.0), Operation('-'), Arg, Arg];
 
-        assert_eq!(reverse_polish(&mut input, &mut args).unwrap(), -4);
+        assert_eq!(reverse_polish(&mut input, &mut args).unwrap(), -4.0);
     }
 }
