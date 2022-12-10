@@ -128,8 +128,8 @@ fn mine_block(
 
     bytes.extend(&new_block.id.to_be_bytes());
     bytes.extend(&new_block.prev_hash);
-    bytes.extend(&serialize(&new_block.data).unwrap());
-    bytes.extend(&serialize(&new_block.mined_by).unwrap());
+    bytes.extend(&serialize(&new_block.data)?);
+    bytes.extend(&serialize(&new_block.mined_by)?);
 
     let mut nonce: u32 = 0;
 

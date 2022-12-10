@@ -8,10 +8,25 @@ use rand::Rng;
 use std::env;
 use std::net::UdpSocket;
 
+
 static NAMES: [&str; 10] = [
     "James", "Oliver", "Max", "Muller", "Bravo", "Fox", "Jimmy", "Jakub", "Willy", "Billy",
 ];
 
+/// Sends a `Msg` over a `UdpSocket` to the IP address `239.0.0.1` on port `9000`.
+///
+/// # Arguments
+///
+/// * `socket` - The `UdpSocket` to use for sending the message.
+/// * `msg` - The `Msg` to send over the `UdpSocket`.
+///
+/// # Example
+///
+/// ```
+/// let socket = UdpSocket::bind("0.0.0.0:9000").expect("Error binding socket");
+/// let msg = Msg::new("hello world");
+/// send_data(socket, msg);
+/// ```
 fn send_data(socket: UdpSocket, msg: Msg) {
     println!(
         "Broadcasted {} bytes",
