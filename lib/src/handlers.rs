@@ -1,12 +1,12 @@
 use log::info;
-use log::{debug, warn};
+use log::{debug};
 
 use crate::datatypes::{BlockData, BlockchainError, ContractResult};
 use crate::verify_new_block;
 use crate::Block;
 use crate::Comm;
 use crate::Msg;
-use crate::{ret_err, send_all};
+use crate::{ret_err};
 use crate::{reverse_polish, verify_broadcasted_block};
 use bincode::deserialize;
 use bincode::serialize;

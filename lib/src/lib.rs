@@ -252,62 +252,108 @@ pub fn handle_msg(
 }
 
 fn reverse_polish(
-    contract: &[RevPolish],
-    args: &mut Vec<f64>,
+    contract_orig: &Vec<RevPolish>,
+    args_orig: &Vec<f64>,
 ) -> Result<f64, Box<dyn std::error::Error>> {
-    if contract.is_empty() {
-        return Err(Box::new(BlockchainError("No contract found".to_string())));
-    }
+    let mut parsed_ints: Vec<f64> = Vec::new();
+    let mut contract = contract_orig.clone();
+    let mut args = args_orig.clone();
 
-    match contract[0] {
-        Number(n) => Ok(n),
-        Operation(c) => match c {
-            '+' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                Ok(val1 + val2)
+    loop {
+        let value: RevPolish;
+        match contract.pop() {
+            Some(s) => {
+                value = s;
             }
-            '-' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                Ok(val1 - val2)
+            None => {
+                return Ok(parsed_ints.pop().unwrap());
             }
-            '*' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                Ok(val1 * val2)
+        }
+        match value {
+            Number(n) => {
+                parsed_ints.push(n);
             }
-            '%' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                if val2 == 0.0 {
-                    return Err(Box::new(BlockchainError(
-                        "Error: division by 0".to_string(),
-                    )));
+            Operation(c) => {
+                let result: f64;
+                match c {
+                    '+' => {
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            + parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
+                        parsed_ints.push(result);
+                    }
+                    '-' => {
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            - parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
+                        parsed_ints.push(result);
+                    }
+                    '*' => {
+                        result = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?
+                            * parsed_ints
+                                .pop()
+                                .ok_or(BlockchainError("No value found".to_string()))?;
+                        parsed_ints.push(result);
+                    }
+                    '%' => {
+                        let val1 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        if val2 == 0.0 {
+                            ret_err!("Error: division by 0");
+                        }
+
+                        parsed_ints.push(val1 % val2);
+                    }
+                    '/' => {
+                        let val1 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        if val2 == 0.0 {
+                            ret_err!("Error: division by 0");
+                        }
+
+                        parsed_ints.push(val1 / val2);
+                    }
+                    'p' => {
+                        let val1 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+                        let val2 = parsed_ints
+                            .pop()
+                            .ok_or(BlockchainError("No value found".to_string()))?;
+
+                        parsed_ints.push(val1.powf(val2));
+                    }
+
+                    _ => {
+                        ret_err!("Unknown sign");
+                    }
                 }
-                Ok(val1 % val2)
             }
-            '/' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                if val2 == 0.0 {
-                    return Err(Box::new(BlockchainError(
-                        "Error: division by 0".to_string(),
-                    )));
-                }
-                Ok(val1 / val2)
+            Arg => {
+                parsed_ints.push(
+                    args.pop()
+                        .ok_or(BlockchainError("No value found".to_string()))?,
+                );
             }
-            'p' => {
-                let val1 = reverse_polish(&contract[1..], args)?;
-                let val2 = reverse_polish(&contract[2..], args)?;
-                Ok(val1.powf(val2))
-            }
-            _ => Err(Box::new(BlockchainError("Unknown sign".to_string()))),
-        },
-        Arg => match args.is_empty() {
-            true => Err(Box::new(BlockchainError("No value found".to_string()))),
-            false => return Ok(args.pop().unwrap()),
-        },
+        }
     }
 }
 
@@ -316,15 +362,15 @@ mod tests {
     use std::vec;
 
     use crate::{
-        datatypes::RevPolish, datatypes::RevPolish::Arg, datatypes::RevPolish::Number,
-        datatypes::RevPolish::Operation, reverse_polish,
+        datatypes::RevPolish::Arg, datatypes::RevPolish::Number, datatypes::RevPolish::Operation,
+        reverse_polish,
     };
 
     #[test]
     fn test_rev_polish() {
-        let mut input: [RevPolish; 3] = [Operation('+'), Number(0.0), Number(1.0)];
+        let mut input = vec![Operation('+'), Number(0.0), Number(1.0)];
         assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 1.0);
-        let mut input = [
+        input = vec![
             Operation('*'),
             Number(2.0),
             Operation('+'),
@@ -332,7 +378,7 @@ mod tests {
             Number(5.0),
         ];
         assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), 16.0);
-        let mut input = [
+        input = vec![
             Operation('*'),
             Number(2.0),
             Operation('-'),
@@ -342,7 +388,7 @@ mod tests {
         assert_eq!(reverse_polish(&mut input, &mut Vec::new()).unwrap(), -4.0);
 
         let mut args: Vec<f64> = vec![5.0, 3.0];
-        let mut input = [Operation('*'), Number(2.0), Operation('-'), Arg, Arg];
+        input = vec![Operation('*'), Number(2.0), Operation('-'), Arg, Arg];
 
         assert_eq!(reverse_polish(&mut input, &mut args).unwrap(), -4.0);
     }
