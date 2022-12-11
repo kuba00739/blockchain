@@ -1,11 +1,11 @@
 use chrono::Local;
 use crossbeam_channel::unbounded;
 use env_logger::Builder;
+use gethostname::gethostname;
 use lib::datatypes::{Block, Comm, Msg};
 use lib::mint_block;
 use lib::{handle_msg, networking::broadcast_chain, networking::listen};
 use log::{debug, LevelFilter};
-use std::env;
 use std::io::Write;
 use std::sync::mpsc;
 use std::thread::sleep;
@@ -29,7 +29,10 @@ fn main() {
     let (tx_listener, rx_main) = mpsc::channel::<Msg>();
     let (mut tx_main_mint, mut rx_main_mint) = unbounded::<Msg>();
 
-    let node_name = env::var("NAME").expect("Couldn't access NODES env variable.");
+    let node_name = match gethostname().into_string(){
+        Ok(s) => {s}
+        Err(_) => {panic!("Couldn't get hostname");}
+    };
 
     let mut blocks: Vec<Block> = Vec::new();
 

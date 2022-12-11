@@ -10,10 +10,6 @@ services:
       dockerfile: Dockerfile
     deploy:
       replicas: 10
-      labels:
-        - "node.name=node-${TASK_SLOT}"
-    environment:
-      - NAME=${TASK_SLOT}
     networks:
       - veth1
 

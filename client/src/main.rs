@@ -8,7 +8,6 @@ use rand::Rng;
 use std::env;
 use std::net::UdpSocket;
 
-
 static NAMES: [&str; 10] = [
     "James", "Oliver", "Max", "Muller", "Bravo", "Fox", "Jimmy", "Jakub", "Willy", "Billy",
 ];

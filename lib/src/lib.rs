@@ -172,6 +172,15 @@ pub fn handle_msg(
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
                 info!("Accepting new blockchain");
+                match tx.send(Msg {
+                    command: Comm::EndMining,
+                    data: Vec::new(),
+                }) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!("Error sending message to miner thread: {e}");
+                    }
+                }
                 *blockchain = s;
             }
             Err(e) => {
