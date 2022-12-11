@@ -85,7 +85,7 @@ pub fn handle_calc_contract(
         crate::BlockData::Contract(s) => {
             let data = BlockData::ContractResult(ContractResult {
                 block_id: (block_id as u32),
-                result: reverse_polish(s, &args)?,
+                result: reverse_polish(s, &mut args.clone())?,
                 args,
             });
             tx.send(Msg {

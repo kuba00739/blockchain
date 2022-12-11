@@ -1,5 +1,5 @@
 use chrono::Local;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::{unbounded, Receiver};
 use env_logger::Builder;
 use gethostname::gethostname;
 use lib::datatypes::{Block, Comm, Msg};
@@ -8,9 +8,43 @@ use lib::{handle_msg, networking::broadcast_chain, networking::listen};
 use log::{debug, LevelFilter};
 use std::io::Write;
 use std::sync::mpsc;
+use std::sync::mpsc::Sender;
 use std::thread::sleep;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+
+fn start_miner_thread(
+    msg: Msg,
+    blocks: &Vec<Block>,
+    node_name: &String,
+    tx_listener: &Sender<Msg>,
+    rx_main_mint: &Receiver<Msg>,
+) -> Option<JoinHandle<()>> {
+    let last_block = match blocks.last() {
+        Some(s) => s.clone(),
+        None => Block::new_empty().clone(),
+    };
+    //let msg_clone = msg.clone();
+    let node_name_clone = node_name.clone();
+    let tx_node = tx_listener.clone();
+    let rx_main_mint_clone = rx_main_mint.clone();
+
+    let miner_thread = Some(thread::spawn({
+        move || match mint_block(
+            &msg,
+            last_block,
+            &node_name_clone,
+            tx_node,
+            rx_main_mint_clone,
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                debug!("Error during minting: {e}");
+            }
+        }
+    }));
+    return miner_thread;
+}
 
 fn main() {
     Builder::new()
@@ -29,9 +63,11 @@ fn main() {
     let (tx_listener, rx_main) = mpsc::channel::<Msg>();
     let (mut tx_main_mint, mut rx_main_mint) = unbounded::<Msg>();
 
-    let node_name = match gethostname().into_string(){
-        Ok(s) => {s}
-        Err(_) => {panic!("Couldn't get hostname");}
+    let node_name = match gethostname().into_string() {
+        Ok(s) => s,
+        Err(_) => {
+            panic!("Couldn't get hostname");
+        }
     };
 
     let mut blocks: Vec<Block> = Vec::new();
@@ -67,44 +103,22 @@ fn main() {
                 broadcast_chain(&blocks);
             }
             Comm::DataToBlock => {
-                match is_miner_running {
-                    true => {
-                        is_miner_running = !(miner_thread.as_ref().unwrap().is_finished());
-                        if is_miner_running {
-                            continue;
-                        }
-                        (tx_main_mint, rx_main_mint) = unbounded::<Msg>();
+                if is_miner_running {
+                    is_miner_running = !(miner_thread.as_ref().unwrap().is_finished());
+                    if is_miner_running {
+                        continue;
                     }
-                    false => {}
+                    (tx_main_mint, rx_main_mint) = unbounded::<Msg>();
                 }
 
-                let last_block = match blocks.last() {
-                    Some(s) => s.clone(),
-                    None => Block::new_empty().clone(),
-                };
-                let node_name_clone = node_name.clone();
-                let tx_node = tx_listener.clone();
-                let rx_main_mint_clone = rx_main_mint.clone();
+                miner_thread =
+                    start_miner_thread(msg, &blocks, &node_name, &tx_listener, &rx_main_mint);
 
-                miner_thread = Some(thread::spawn({
-                    move || match mint_block(
-                        &msg,
-                        last_block,
-                        &node_name_clone,
-                        tx_node,
-                        rx_main_mint_clone,
-                    ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            debug!("Error during minting: {e}");
-                        }
-                    }
-                }));
                 is_miner_running = true;
-                continue;
             }
-            _ => {}
+            _ => {
+                handle_msg(msg, &mut blocks, &tx_main_mint, &tx_listener);
+            }
         }
-        handle_msg(msg, &mut blocks, &tx_main_mint, &tx_listener);
     }
 }
