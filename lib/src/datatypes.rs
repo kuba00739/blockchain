@@ -54,7 +54,6 @@ pub enum BlockData {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Comm {
     NewBlock,
-    Accepted,
     DataToBlock,
     PrintChain,
     Broadcast,

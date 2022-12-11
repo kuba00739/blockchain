@@ -23,15 +23,6 @@ pub fn handle_new_block(
         return Ok(());
     };
     verify_new_block(block.clone(), blockchain)?;
-    match send_all(Msg {
-        command: Comm::Accepted,
-        data: serialize(&block).unwrap(),
-    }) {
-        Ok(_) => {}
-        Err(e) => {
-            warn!("Error while multicasting accepted message: {e}");
-        }
-    }
 
     tx.send(Msg {
         command: Comm::EndMining,

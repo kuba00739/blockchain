@@ -2,9 +2,10 @@ pub mod datatypes;
 mod handlers;
 pub mod networking;
 pub use crate::datatypes::{Block, BlockData, Car, Comm, Msg, RevPolish, HASH_LEN};
-use crate::networking::send_all;
+use crate::networking::{broadcast_chain, send_all};
 use bincode::deserialize;
 use bincode::serialize;
+use crossbeam_channel::unbounded;
 use crossbeam_channel::{Receiver, Sender};
 use datatypes::BlockchainError;
 use datatypes::RevPolish::{Arg, Number, Operation};
@@ -12,7 +13,8 @@ use handlers::handle_calc_contract;
 use log::{debug, info, warn};
 use sha2::{Digest, Sha256};
 use std::sync::mpsc::Sender as StdSender;
-
+use std::thread;
+use std::thread::JoinHandle;
 #[macro_export]
 macro_rules! ret_err {
     ( $x:expr ) => {{
@@ -149,15 +151,69 @@ fn mine_block(
     ret_err!("Mining stopped via message.");
 }
 
+fn start_miner_thread(
+    msg: Msg,
+    blocks: &Vec<Block>,
+    node_name: &String,
+    tx_mpsc: &std::sync::mpsc::Sender<Msg>,
+    rx_mpmc: &Receiver<Msg>,
+) -> Option<JoinHandle<()>> {
+    let last_block = match blocks.last() {
+        Some(s) => s.clone(),
+        None => Block::new_empty().clone(),
+    };
+    let node_name_clone = node_name.clone();
+    let tx_mpsc_clone = tx_mpsc.clone();
+    let rx_mpmc_clone = rx_mpmc.clone();
+
+    let miner_thread = Some(thread::spawn({
+        move || match mint_block(
+            &msg,
+            last_block,
+            &node_name_clone,
+            tx_mpsc_clone,
+            rx_mpmc_clone,
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                debug!("Error during minting: {e}");
+            }
+        }
+    }));
+    return miner_thread;
+}
+
 pub fn handle_msg(
     msg: Msg,
     blockchain: &mut Vec<Block>,
-    tx: &Sender<Msg>,
-    tx_loopback: &std::sync::mpsc::Sender<Msg>,
+    is_miner_running: &mut bool,
+    miner_thread: &mut Option<JoinHandle<()>>,
+    node_name: &String,
+
+    tx_mpsc: &std::sync::mpsc::Sender<Msg>,
+    tx_mpmc: &mut Sender<Msg>,
+    rx_mpmc: &mut Receiver<Msg>,
 ) {
     match msg.command {
+        Comm::DataToBlock => {
+            if *is_miner_running {
+                *is_miner_running = !(miner_thread.as_ref().unwrap().is_finished());
+                if *is_miner_running {
+                    return;
+                }
+                (*tx_mpmc, *rx_mpmc) = unbounded::<Msg>();
+            }
+
+            *miner_thread = start_miner_thread(msg, blockchain, &node_name, &tx_mpsc, &rx_mpmc);
+
+            *is_miner_running = true;
+        }
+        Comm::Broadcast => {
+            broadcast_chain(blockchain);
+        }
+
         Comm::NewBlock => {
-            if let Err(e) = handlers::handle_new_block(&msg, blockchain, tx) {
+            if let Err(e) = handlers::handle_new_block(&msg, blockchain, &tx_mpmc) {
                 warn!("Error during new block handling: {e}");
             }
         }
@@ -167,7 +223,7 @@ pub fn handle_msg(
         Comm::Blockchain => match handlers::handle_incoming_blockchain(&msg, &blockchain) {
             Ok(s) => {
                 info!("Accepting new blockchain");
-                match tx.send(Msg {
+                match tx_mpmc.send(Msg {
                     command: Comm::EndMining,
                     data: Vec::new(),
                 }) {
@@ -182,7 +238,7 @@ pub fn handle_msg(
                 debug!("New blockchain verification failed: {e}");
             }
         },
-        Comm::CalcContract => match handle_calc_contract(&msg, tx_loopback, blockchain) {
+        Comm::CalcContract => match handle_calc_contract(&msg, tx_mpsc, blockchain) {
             Ok(()) => {
                 info!("Calculated contract value");
             }

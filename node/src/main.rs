@@ -1,50 +1,15 @@
 use chrono::Local;
-use crossbeam_channel::{unbounded, Receiver};
+use crossbeam_channel::unbounded;
 use env_logger::Builder;
 use gethostname::gethostname;
-use lib::datatypes::{Block, Comm, Msg};
-use lib::mint_block;
-use lib::{handle_msg, networking::broadcast_chain, networking::listen};
+use lib::datatypes::{Block, Msg};
+use lib::{handle_msg, networking::listen};
 use log::{debug, LevelFilter};
 use std::io::Write;
 use std::sync::mpsc;
-use std::sync::mpsc::Sender;
 use std::thread::sleep;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-
-fn start_miner_thread(
-    msg: Msg,
-    blocks: &Vec<Block>,
-    node_name: &String,
-    tx_listener: &Sender<Msg>,
-    rx_main_mint: &Receiver<Msg>,
-) -> Option<JoinHandle<()>> {
-    let last_block = match blocks.last() {
-        Some(s) => s.clone(),
-        None => Block::new_empty().clone(),
-    };
-    //let msg_clone = msg.clone();
-    let node_name_clone = node_name.clone();
-    let tx_node = tx_listener.clone();
-    let rx_main_mint_clone = rx_main_mint.clone();
-
-    let miner_thread = Some(thread::spawn({
-        move || match mint_block(
-            &msg,
-            last_block,
-            &node_name_clone,
-            tx_node,
-            rx_main_mint_clone,
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                debug!("Error during minting: {e}");
-            }
-        }
-    }));
-    return miner_thread;
-}
 
 fn main() {
     Builder::new()
@@ -60,8 +25,8 @@ fn main() {
         .filter(None, LevelFilter::Info)
         .init();
 
-    let (tx_listener, rx_main) = mpsc::channel::<Msg>();
-    let (mut tx_main_mint, mut rx_main_mint) = unbounded::<Msg>();
+    let (tx_mpsc, rx_mpsc) = mpsc::channel::<Msg>();
+    let (mut tx_mpmc, mut rx_mpmc) = unbounded::<Msg>();
 
     let node_name = match gethostname().into_string() {
         Ok(s) => s,
@@ -72,52 +37,45 @@ fn main() {
 
     let mut blocks: Vec<Block> = Vec::new();
 
-    let tx1 = tx_listener.clone();
+    let tx_mpsc_1 = tx_mpsc.clone();
 
     thread::spawn({
         move || {
-            listen(tx1);
+            listen(tx_mpsc_1);
         }
     });
 
-    let tx2 = tx_listener.clone();
+    let tx_mpsc_2 = tx_mpsc.clone();
 
     thread::spawn({
         move || loop {
             sleep(Duration::new(60, 0));
-            tx2.send(Msg {
-                command: lib::Comm::Broadcast,
-                data: Vec::new(),
-            })
-            .expect("Message to main thread couldn't be sent.");
+            tx_mpsc_2
+                .send(Msg {
+                    command: lib::Comm::Broadcast,
+                    data: Vec::new(),
+                })
+                .expect("Message to main thread couldn't be sent.");
         }
     });
 
     let mut miner_thread: Option<JoinHandle<()>> = None;
     let mut is_miner_running: bool = false;
 
-    for msg in rx_main {
+    for msg in rx_mpsc {
         debug!("Received msg: {:#?}", msg);
         match msg.command {
-            Comm::Broadcast => {
-                broadcast_chain(&blocks);
-            }
-            Comm::DataToBlock => {
-                if is_miner_running {
-                    is_miner_running = !(miner_thread.as_ref().unwrap().is_finished());
-                    if is_miner_running {
-                        continue;
-                    }
-                    (tx_main_mint, rx_main_mint) = unbounded::<Msg>();
-                }
-
-                miner_thread =
-                    start_miner_thread(msg, &blocks, &node_name, &tx_listener, &rx_main_mint);
-
-                is_miner_running = true;
-            }
             _ => {
-                handle_msg(msg, &mut blocks, &tx_main_mint, &tx_listener);
+                handle_msg(
+                    msg,
+                    &mut blocks,
+                    &mut is_miner_running,
+                    &mut miner_thread,
+                    &node_name,
+                    &tx_mpsc,
+                    &mut tx_mpmc,
+                    &mut rx_mpmc,
+                );
             }
         }
     }
